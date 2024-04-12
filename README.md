@@ -19,3 +19,18 @@ Drawing inspiration from various repositories:
 Planning to implement stratification using:
 - **MIMIC-IV Splits Generator by JoakimEdin**
   - Source: [GitHub](https://github.com/JoakimEdin/medical-coding-reproducibility/blob/main/prepare_data/generate_mimiciv_splits.py)
+
+More details on the tasks I'm checking: 
+
+- [x] Load MIMIC data
+- [x] Clean data
+- [x] Map ICD data to CCS and CCSR
+- [x] Trim codes assigned per visit based on a threshold
+- [x] Build the data
+- [x] Remove codes with occurrence less than a certain threshold
+- [ ] Save the data before formatting based on the task
+- [ ] Prepare data for Trajectory Forecasting
+- [ ] Remove certain codes from output for different data formats
+- [ ] Store files for Trajectory Forecasting
+- [ ] Prepare data for Sequential disease prediction
+- [ ] Remove certain codes from output for Sequential disease prediction
