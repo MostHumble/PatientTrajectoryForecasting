@@ -32,5 +32,5 @@ More details on the tasks I'm checking:
 - [x] Prepare data for Trajectory Forecasting
 - [x] Remove certain codes from output for different data formats
 - [x] Store files for Trajectory Forecasting
-- [] Prepare data for Sequential disease prediction
+- [ ] Prepare data for Sequential disease prediction
 - [ ] Remove certain codes from output for Sequential disease prediction
