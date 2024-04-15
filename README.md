@@ -28,9 +28,9 @@ More details on the tasks I'm checking:
 - [x] Trim codes assigned per visit based on a threshold
 - [x] Build the data
 - [x] Remove codes with occurrence less than a certain threshold
-- [ ] Save the data before formatting based on the task
-- [ ] Prepare data for Trajectory Forecasting
-- [ ] Remove certain codes from output for different data formats
-- [ ] Store files for Trajectory Forecasting
-- [ ] Prepare data for Sequential disease prediction
+- [x] Save the data before formatting based on the task
+- [x] Prepare data for Trajectory Forecasting
+- [x] Remove certain codes from output for different data formats
+- [x] Store files for Trajectory Forecasting
+- [] Prepare data for Sequential disease prediction
 - [ ] Remove certain codes from output for Sequential disease prediction
