@@ -20,7 +20,7 @@ Planning to implement stratification using:
 - **MIMIC-IV Splits Generator by JoakimEdin**
   - Source: [GitHub](https://github.com/JoakimEdin/medical-coding-reproducibility/blob/main/prepare_data/generate_mimiciv_splits.py)
 
-Finished on the afternoon of april 16th : 
+**Finished on the afternoon of april 16th :** 
 
 - [x] Load MIMIC data
 - [x] Clean data
