@@ -20,7 +20,7 @@ Planning to implement stratification using:
 - **MIMIC-IV Splits Generator by JoakimEdin**
   - Source: [GitHub](https://github.com/JoakimEdin/medical-coding-reproducibility/blob/main/prepare_data/generate_mimiciv_splits.py)
 
-More details on the tasks I'm checking: 
+Finished on the afternoon of april 16th : 
 
 - [x] Load MIMIC data
 - [x] Clean data
@@ -32,5 +32,6 @@ More details on the tasks I'm checking:
 - [x] Prepare data for Trajectory Forecasting
 - [x] Remove certain codes from output for different data formats
 - [x] Store files for Trajectory Forecasting
-- [ ] Prepare data for Sequential disease prediction
-- [ ] Remove certain codes from output for Sequential disease prediction
+- [x] Prepare data for Sequential disease prediction
+- [x] Remove certain codes from output for Sequential disease prediction
+
