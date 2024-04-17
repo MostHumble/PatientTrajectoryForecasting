@@ -34,4 +34,6 @@ Planning to implement stratification using:
 - [x] Store files for Trajectory Forecasting
 - [x] Prepare data for Sequential disease prediction
 - [x] Remove certain codes from output for Sequential disease prediction
-
+- [x] Add test branch
+- [x] Clean the code
+- [ ] Implement the function to add special tokens
