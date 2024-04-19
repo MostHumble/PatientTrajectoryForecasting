@@ -698,3 +698,21 @@ def generateCodeTypes(outFile: str, reverseTypes: Dict[int, str]) -> Dict[str, i
     pickle.dump(codeType, open(os.path.join(outFile , 'data.codeType'), 'wb'), -1)
 
     return codeType
+
+def saveFiles(updatedSeqs : List[List[List[int]]], types : Dict[str, int], codeDescription : Dict[str, str], outFile : str = 'outputData/originalData/'):
+    """
+    Save the updated sequences, types, and code description to files.
+
+    Args:
+    updatedSeqs (List[List[List[int]]]): The updated sequences to be saved.
+    types: The types to be saved.
+    codeDescription (str): The code description to be saved.
+    outpath (str, optional): The output path where the files will be saved. Defaults to 'outputData/originalData/'.
+    """
+
+    if not os.path.exists(outFile):
+        os.makedirs(outFile)
+    
+    pickle.dump(updatedSeqs, open(outFile + 'data.seqs', 'wb'), -1)
+    pickle.dump(types, open(outFile + 'data.types', 'wb'), -1)
+    pickle.dump(codeDescription, open(outFile + 'data.description', 'wb'), -1)
