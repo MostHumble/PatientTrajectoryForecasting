@@ -16,6 +16,7 @@ Drawing inspiration from various repositories:
    - Source: [GitHub](https://github.com/mp2893/doctorai/blob/master/process_mimic.py)
 
 ### Stratification Strategy
+# This tasks is pending...
 Planning to implement stratification using:
 - **MIMIC-IV Splits Generator by JoakimEdin**
   - Source: [GitHub](https://github.com/JoakimEdin/medical-coding-reproducibility/blob/main/prepare_data/generate_mimiciv_splits.py)
@@ -36,4 +37,5 @@ Planning to implement stratification using:
 - [x] Remove certain codes from output for Sequential disease prediction
 - [x] Add test branch
 - [x] Clean the code
-- [ ] Implement the function to add special tokens
+- [x] Implement the function to add special tokens
+- [ ] Making tests before merge
