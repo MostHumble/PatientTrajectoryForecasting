@@ -516,7 +516,8 @@ def icd_mapping(CCSRDX_file: str, CCSRPCS_file: str, CCSDX_file: str, CCSPX_file
     return adDx,adPx,codeDescription
 
 
-def trim(adDx  : Dict[int,List[int]], adPx  : Dict[int,List[int]], adDrug  : Dict[int,List[int]], min_dx : int, min_px : int, min_drg: int) -> Tuple[Dict[int,List[int]], Dict[int,List[int]], Dict[int,List[int]]]:
+def trim(adDx  : Dict[int,List[int]], adPx  : Dict[int,List[int]], adDrug  : Dict[int,List[int]], max_dx : int, max_px : int, max_drg: int)\
+      -> Tuple[Dict[int,List[int]], Dict[int,List[int]], Dict[int,List[int]]]:
     """
     Trims the diagnosis, procedure, and medication codes for each visit.
 
@@ -524,9 +525,9 @@ def trim(adDx  : Dict[int,List[int]], adPx  : Dict[int,List[int]], adDrug  : Dic
     adDx (dict): A dictionary containing admission IDs as keys and diagnosis codes as values.
     adPx (dict): A dictionary containing admission IDs as keys and procedure codes as values.
     adDrug (dict): A dictionary containing admission IDs as keys and medication codes as values.
-    min_dxm (int): The minimum number of diagnosis codes to keep for each admission.
-    min_px (int): The minimum number of procedure codes to keep for each admission.
-    min_drg (int): The minimum number of medication codes to keep for each admission.
+    max_dx (int): The maximum number of diagnosis codes to keep for each admission.
+    max_px (int): The maximum number of procedure codes to keep for each admission.
+    maxdrg (int): The maximum number of medication codes to keep for each admission.
 
     Returns:
     tuple: A tuple containing the trimmed dictionaries for diagnosis codes, procedure codes, and medication codes.
@@ -535,13 +536,13 @@ def trim(adDx  : Dict[int,List[int]], adPx  : Dict[int,List[int]], adDrug  : Dic
     print("Trimming the diagnosis, procedure, and medication codes for each visit")
     
     for admission, DiagCodes in adDx.items():
-        adDx[admission] = DiagCodes[:min_dx]
+        adDx[admission] = DiagCodes[:max_dx]
         
     for admission, ProcCodes in adPx.items():
-        adPx[admission] = ProcCodes[:min_px]
+        adPx[admission] = ProcCodes[:max_px]
         
     for admission, DrugCodes in adDrug.items():
-        adDrug[admission] = DrugCodes[:min_drg]
+        adDrug[admission] = DrugCodes[:max_drg]
         
     displayCodeStats(adDx, adPx, adDrug)
     return adDx, adPx, adDrug
