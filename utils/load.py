@@ -527,7 +527,7 @@ def trim(adDx  : Dict[int,List[int]], adPx  : Dict[int,List[int]], adDrug  : Dic
     adDrug (dict): A dictionary containing admission IDs as keys and medication codes as values.
     max_dx (int): The maximum number of diagnosis codes to keep for each admission.
     max_px (int): The maximum number of procedure codes to keep for each admission.
-    maxdrg (int): The maximum number of medication codes to keep for each admission.
+    max_drg (int): The maximum number of medication codes to keep for each admission.
 
     Returns:
     tuple: A tuple containing the trimmed dictionaries for diagnosis codes, procedure codes, and medication codes.
