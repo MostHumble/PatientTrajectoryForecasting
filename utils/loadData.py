@@ -1,14 +1,13 @@
 import os
 import pickle
-import torch 
-from typing import Dict, Optional, Tuple, List, Union
+from typing import Dict, Optional, Tuple, List
 
-def load_data(outFile: str) -> Tuple[List[List[List[int]]], Dict[str, int], Dict[str, int], Dict[int, str]]:
+def loadData(path: str) -> Tuple[List[List[List[int]]], Dict[str, int], Dict[str, int], Dict[int, str]]:
         """
         Load data from the specified file.
 
         Args:
-        - outFile (str): The path to the file containing the data.
+        - path (str): The path to the file containing the data.
 
         Returns:
         - Tuple[List[List[List[int]]], Dict[str, ], Dict[str, int], Dict[int, str]]: A tuple containing the loaded data.
@@ -18,9 +17,9 @@ def load_data(outFile: str) -> Tuple[List[List[List[int]]], Dict[str, int], Dict
             - The fourth element is a dictionary mapping event codes to their corresponding types (reversed mapping).
         """
         # load the data again
-        seqs = pickle.load(open(os.path.join(outFile, 'data.seqs'), 'rb'))
-        types = pickle.load(open(os.path.join(outFile, 'data.types'), 'rb'))
-        codeType = pickle.load(open(os.path.join(outFile, 'data.codeType'), 'rb'))
+        seqs = pickle.load(open(os.path.join(path, 'data.seqs'), 'rb'))
+        types = pickle.load(open(os.path.join(path, 'data.types'), 'rb'))
+        codeType = pickle.load(open(os.path.join(path, 'data.codeType'), 'rb'))
         reverseTypes = {v: k for k, v in types.items()}
         return seqs, types, codeType, reverseTypes
 
@@ -73,102 +72,100 @@ def PrepareForSDP(sequence: List[List[int]]):
     pairs = listTuples(X, y)
     return pairs
 
-def formatData(originalSeqs : List[List[List[int]]],  dataFormat : Optional[str] = 'TF') -> List[Tuple[List[int], List[int]]]:
+def formatData(sequences : List[List[List[int]]],  strategy : Optional[str] = 'TF') -> List[Tuple[List[int], List[int]]]:
     """
     Formats the original sequences based on the specified data format.
 
     Args:
-        originalSeqs (List[List[List[int]]]): The original sequences to be formatted.
-        dataFormat (str, optional): The data format to use. Can be either 'TF' for trajectory forecasting or 'SDP' for sequential disease prediction. Defaults to 'TF'.
-        max_lenght (int, optional): The minimum sequence length. Pairs with a length greater than this value will be removed. Defaults to 400.
+        sequences (List[List[List[int]]]): The original sequences to be formatted.
+        strategy (str, optional): The data format to use. Can be either 'TF' for trajectory forecasting or 'SDP' for sequential disease prediction. Defaults to 'TF'.
 
     Returns:
         List[Tuple[List[List[int]]]]: The formatted pairs of input and output sequences.
     """
 
-    pairs = []
+    source_target_sequences = []
     
-    for i in range(len(originalSeqs)):
+    for i in range(len(sequences)):
         # Trajectory forecasting (TF): predict until the end of EOH
-        if dataFormat == 'TF':
-            pairs.extend(PrepareForTF(originalSeqs[i]))
+        if strategy == 'TF':
+            source_target_sequences.extend(PrepareForTF(sequences[i]))
         # Sequential disease prediction (SDP): predict until the next visit
-        elif dataFormat == 'SDP':
-            pairs.extend(PrepareForSDP(originalSeqs[i]))
+        elif strategy == 'SDP':
+            source_target_sequences.extend(PrepareForSDP(sequences[i]))
         else:
             raise Exception('Wrong strategy, must choose either TF, SDP')
-    return pairs
+    return source_target_sequences
 
-def updateOutput(newPairs : List[Tuple[List[List[int]], List[List[int]]]], codeType: Dict[int, str], diagnosis: bool = False, procedure : bool = False , drugs : bool = False)\
-    -> List[Tuple[List[List[int]]]] :
+def filterCodes(source_target_sequences : List[Tuple[List[List[int]], List[List[int]]]], ids_to_types_map: Dict[int, str], diagnosis: bool = False, procedure : bool = False , drugs : bool = False)\
+    -> List[Tuple[List[int]]] :
     """
-    Update the output sequences based on the specified criteria.
+    Filters the codes of target sequences to remove indicated types, and flattens the both sequnces.
 
     Args:
-    - newPairs (list): List of pairs containing the input and output sequences.
-    - codeType (dict): Dictionary mapping codes to their corresponding types.
-    - diagnosis (int): Flag indicating whether to include diagnosis codes in the output. Default is 0.
-    - procedure (int): Flag indicating whether to include procedure codes in the output. Default is 0.
-    - drugs (int): Flag indicating whether to include drug codes in the output. Default is 0.
-    - all_ (int): Flag indicating whether to keep all codes in the output. Default is 0.
+    - source_target_sequences (list): List of pairs containing the input and output sequences.
+    - ids_to_types_map (dict): Dictionary mapping codes to their corresponding types.
+    - diagnosis (bool): Flag indicating whether to include diagnosis codes in the output. Default is False.
+    - procedure (bool): Flag indicating whether to include procedure codes in the output. Default is False.
+    - drugs (bool): Flag indicating whether to include drug codes in the output. Default is False.
 
     Returns:
-    - updSeqs (list): List of updated pairs containing the input and updated output sequences.
+    - updated_source_target_sequences (list): List of updated pairs containing the special tokens, and flattend
     """
 
-    updSeqs = []
+    updated_source_target_sequences = []
 
     if procedure and drugs:
         print("\n Removing drug and procedure codes from output for forecasting diagnosis code only")
-        for i, pair in enumerate(newPairs):
+        for i, pair in enumerate(source_target_sequences):
             newOutput = []
             for code in pair[1]:
-                if codeType[code] == 'D' or codeType[code] == 'T':
+                if ids_to_types_map[code] == 'D' or ids_to_types_map[code] == 'T':
                     newOutput.append(code)
 
             if len(newOutput) >= 4:
-                updSeqs.append((pair[0], newOutput))
+                updated_source_target_sequences.append((pair[0], newOutput))
 
     if drugs and not(procedure):
         print("\n Removing only drug codes from output for forecasting diagnosis and procedure code only")
-        for i, pair in enumerate(newPairs):
+        for i, pair in enumerate(source_target_sequences):
             newOutput = []
             for code in pair[1]:
-                if not (codeType[code] == 'DR'):
+                if not (ids_to_types_map[code] == 'DR'):
                     newOutput.append(code)
             if len(newOutput) >= 4:
-                updSeqs.append((pair[0], newOutput))
+                updated_source_target_sequences.append((pair[0], newOutput))
 
     if not(diagnosis) and not(procedure) and not(drugs):
         print("\n keeping all codes")
-        updSeqs = newPairs.copy()
+        updated_source_target_sequences = source_target_sequences.copy()
 
-    return updSeqs
+    return updated_source_target_sequences
 
-def resetIntegerOutput(updSeqs: List[List[int]]) -> Tuple[List[List[int]], Dict[int, int]]:
+def resetIntegerOutput(source_target_sequences: List[List[int]]) -> Tuple[List[List[int]], Dict[int, int]]:
     """
     Resets the integer output codes in the given sequence of pairs.
 
     Args:
-        updSeqs (List[List[int]]): A list of pairs where each pair contains an integer and a list of codes.
+        source_target_sequences (List[List[int]]): A list of pairs where each pair contains an integer and a list of codes.
 
     Returns:
         Tuple[List[List[int]], Dict[int, int]]: A tuple containing the updated pairs and a dictionary mapping the old codes to new codes.
     """
-    updPair = []
-    outTypes = {}
+    updated_source_target_sequences = []
+    old_to_new_map = {}
     # keep same ids for special tokens
-    outTypes.update({0: 0, 1: 1, 2: 2, 3: 3, 4: 4, 5: 5}) 
-    for i, pair in enumerate(updSeqs):
+    old_to_new_map.update({0: 0, 1: 1, 2: 2, 3: 3, 4: 4, 5: 5}) 
+    for i, pair in enumerate(source_target_sequences):
         newVisit = []
         for code in pair[1]:
-            if code in outTypes:
-                newVisit.append(outTypes[code])
+            if code in old_to_new_map:
+                newVisit.append(old_to_new_map[code])
             else:
-                outTypes[code] = len(outTypes)
-                newVisit.append(outTypes[code])
-        updPair.append((pair[0], newVisit))
-    return updPair, outTypes
+                old_to_new_map[code] = len(old_to_new_map)
+                newVisit.append(old_to_new_map[code])
+        updated_source_target_sequences.append((pair[0], newVisit))
+    return updated_source_target_sequences, old_to_new_map
 
 
 def storeFiles(pair : List[Tuple[List[int], List[int]]], outTypes : Dict[int, int], codeType : Dict[int, str], types : Dict[str, int], reverseTypes : Dict[int, str], outFile: str):
@@ -186,3 +183,54 @@ def storeFiles(pair : List[Tuple[List[int], List[int]]], outTypes : Dict[int, in
     pickle.dump(reverseTypes, open(os.path.join(outFile, 'data.reverseTypes'), 'wb'), -1)
     reverseOutTypes = {v: k for k, v in outTypes.items()}
     pickle.dump(reverseOutTypes, open(os.path.join(outFile, 'data.reverseOutTypes'), 'wb'), -1)
+
+
+def AddSpecialTokens(source_target_sequences: List[Tuple[List[int], List[int]]], tokens_to_ids_map: Dict[str, int], truncate : Optional[bool] = False, pad : Optional[bool] = False, input_max_length: Optional[int] = None , output_max_length: Optional[int] = None) -> List[Tuple[List[List[int]]]]:
+    """
+    Adds special tokens to the input and output sequences in the given list of pairs.
+
+    Args:
+        source_target_sequences (List[Tuple[List[int],List[int]]]): A list of pairs, where each pair contains an input source and target sequence.
+        tokens_to_ids_map (Dict[str,int]): A dictionary containing special tokens.
+        truncate (Optional[bool]): If True, truncates sequences to `input_max_length` or `output_max_length` if provided.
+        pad (Optional[bool]): If True, pads sequences to `input_max_length` or `output_max_length` if provided.
+        input_max_length (Optional[int]): Maximum length for input sequences.
+        output_max_length (Optional[int]): Maximum length for output sequences.
+
+    Returns:
+        List[Tuple[List[List[int]]]]: A new list of pairs with special tokens added to the input source and target sequence.
+    """
+    
+    updated_source_target_sequences = []
+    for pair in source_target_sequences:
+        input_sequences, output_sequences = pair
+        input_sequence_spec, output_sequence_spec = [], []
+        # Adding special tokens to input sequence
+        for input_sequence in input_sequences:
+            input_sequence =  [tokens_to_ids_map['BOV']] + input_sequence + [tokens_to_ids_map['EOV']]
+            input_sequence_spec.extend(input_sequence)
+        input_sequence_spec = [tokens_to_ids_map['BOH']] + input_sequence_spec + [tokens_to_ids_map['EOH']]                   
+        
+        # Adding special tokens to output sequence
+        for output_sequence in output_sequences:
+            output_sequence =  [tokens_to_ids_map['BOV']] + output_sequence + [tokens_to_ids_map['EOV']] 
+            output_sequence_spec.extend(output_sequence)
+        output_sequence_spec = [tokens_to_ids_map['BOS']] + output_sequence_spec + [tokens_to_ids_map['EOH']]
+            
+        # Truncate or pad input sequence
+        if input_max_length is not None:
+            if truncate:
+                input_sequence_spec = input_sequence_spec[:input_max_length]
+            if pad:
+                input_sequence_spec += [tokens_to_ids_map['PAD']] * (input_max_length - len(input_sequence_spec))
+        
+        # Truncate or pad output sequence
+        if output_max_length is not None:
+            if truncate:
+                output_sequence_spec = output_sequence_spec[:output_max_length]
+            if pad:
+                output_sequence_spec += [tokens_to_ids_map['PAD']] * (output_max_length - len(output_sequence_spec))
+        updated_source_target_sequences.append((input_sequence_spec, output_sequence_spec))
+            
+        
+    return updated_source_target_sequences
