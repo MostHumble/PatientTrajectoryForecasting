@@ -1,8 +1,10 @@
 import os
 import pickle
-from typing import Dict, Optional, Tuple, List
+import numpy as np
+from collections import defaultdict
+from typing import Dict, Optional, Tuple, List, Union
 
-def loadData(path: str) -> Tuple[List[List[List[int]]], Dict[str, int], Dict[str, int], Dict[int, str]]:
+def load_data(path: str) -> Tuple[List[List[List[int]]], Dict[str, int], Dict[str, int], Dict[int, str]]:
         """
         Load data from the specified file.
 
@@ -23,13 +25,13 @@ def loadData(path: str) -> Tuple[List[List[List[int]]], Dict[str, int], Dict[str
         reverseTypes = {v: k for k, v in types.items()}
         return seqs, types, codeType, reverseTypes
 
-def listTuples(x : List[List[int]], y : List[List[int]]) -> List[Tuple[List[int], List[int]]]:
+def list_tuples(x : List[List[int]], y : List[List[int]]) -> List[Tuple[List[int], List[int]]]:
     pairs = []
     for i, a in enumerate(zip(x,y)):
         pairs.append(a)
     return pairs
 
-def PrepareForTF(sequence : List[List[int]]) -> Tuple[List[List[int]]]:
+def prepare_for_tf(sequence : List[List[int]]) -> Tuple[List[List[int]]]:
     """
     Prepares the input sequence for trajectory forecasting training by creating pairs of input and output sequences.
 
@@ -46,11 +48,11 @@ def PrepareForTF(sequence : List[List[int]]) -> Tuple[List[List[int]]]:
             break
         X.append(sequence[:i+1])
         y.append(sequence[i+1:])
-    pairs = listTuples(X, y)
+    pairs = list_tuples(X, y)
     return pairs
 
 
-def PrepareForSDP(sequence: List[List[int]]):
+def prepare_for_sdp(sequence: List[List[int]]):
     """
     Prepare the sequence for Sequential disease prediction modeling.
 
@@ -69,10 +71,10 @@ def PrepareForSDP(sequence: List[List[int]]):
         X.append(sequence[:i+1])
         y.append([sequence[i+1]])
         
-    pairs = listTuples(X, y)
+    pairs = list_tuples(X, y)
     return pairs
 
-def formatData(sequences : List[List[List[int]]],  strategy : Optional[str] = 'TF') -> List[Tuple[List[int], List[int]]]:
+def format_data(sequences : List[List[List[int]]],  strategy : Optional[str] = 'TF') -> List[Tuple[List[int], List[int]]]:
     """
     Formats the original sequences based on the specified data format.
 
@@ -89,60 +91,15 @@ def formatData(sequences : List[List[List[int]]],  strategy : Optional[str] = 'T
     for i in range(len(sequences)):
         # Trajectory forecasting (TF): predict until the end of EOH
         if strategy == 'TF':
-            source_target_sequences.extend(PrepareForTF(sequences[i]))
+            source_target_sequences.extend(prepare_for_tf(sequences[i]))
         # Sequential disease prediction (SDP): predict until the next visit
         elif strategy == 'SDP':
-            source_target_sequences.extend(PrepareForSDP(sequences[i]))
+            source_target_sequences.extend(prepare_for_sdp(sequences[i]))
         else:
             raise Exception('Wrong strategy, must choose either TF, SDP')
     return source_target_sequences
 
-def filterCodes(source_target_sequences : List[Tuple[List[List[int]], List[List[int]]]], ids_to_types_map: Dict[int, str], diagnosis: bool = False, procedure : bool = False , drugs : bool = False)\
-    -> List[Tuple[List[int]]] :
-    """
-    Filters the codes of target sequences to remove indicated types, and flattens the both sequnces.
-
-    Args:
-    - source_target_sequences (list): List of pairs containing the input and output sequences.
-    - ids_to_types_map (dict): Dictionary mapping codes to their corresponding types.
-    - diagnosis (bool): Flag indicating whether to include diagnosis codes in the output. Default is False.
-    - procedure (bool): Flag indicating whether to include procedure codes in the output. Default is False.
-    - drugs (bool): Flag indicating whether to include drug codes in the output. Default is False.
-
-    Returns:
-    - updated_source_target_sequences (list): List of updated pairs containing the special tokens, and flattend
-    """
-
-    updated_source_target_sequences = []
-
-    if procedure and drugs:
-        print("\n Removing drug and procedure codes from output for forecasting diagnosis code only")
-        for i, pair in enumerate(source_target_sequences):
-            newOutput = []
-            for code in pair[1]:
-                if ids_to_types_map[code] == 'D' or ids_to_types_map[code] == 'T':
-                    newOutput.append(code)
-
-            if len(newOutput) >= 4:
-                updated_source_target_sequences.append((pair[0], newOutput))
-
-    if drugs and not(procedure):
-        print("\n Removing only drug codes from output for forecasting diagnosis and procedure code only")
-        for i, pair in enumerate(source_target_sequences):
-            newOutput = []
-            for code in pair[1]:
-                if not (ids_to_types_map[code] == 'DR'):
-                    newOutput.append(code)
-            if len(newOutput) >= 4:
-                updated_source_target_sequences.append((pair[0], newOutput))
-
-    if not(diagnosis) and not(procedure) and not(drugs):
-        print("\n keeping all codes")
-        updated_source_target_sequences = source_target_sequences.copy()
-
-    return updated_source_target_sequences
-
-def resetIntegerOutput(source_target_sequences: List[List[int]]) -> Tuple[List[List[int]], Dict[int, int]]:
+def reset_integer_output(source_target_sequences: List[List[int]]) -> Tuple[List[List[int]], Dict[int, int]]:
     """
     Resets the integer output codes in the given sequence of pairs.
 
@@ -153,22 +110,75 @@ def resetIntegerOutput(source_target_sequences: List[List[int]]) -> Tuple[List[L
         Tuple[List[List[int]], Dict[int, int]]: A tuple containing the updated pairs and a dictionary mapping the old codes to new codes.
     """
     updated_source_target_sequences = []
-    old_to_new_map = {}
     # keep same ids for special tokens
-    old_to_new_map.update({0: 0, 1: 1, 2: 2, 3: 3, 4: 4, 5: 5}) 
-    for i, pair in enumerate(source_target_sequences):
-        newVisit = []
-        for code in pair[1]:
-            if code in old_to_new_map:
-                newVisit.append(old_to_new_map[code])
-            else:
-                old_to_new_map[code] = len(old_to_new_map)
-                newVisit.append(old_to_new_map[code])
-        updated_source_target_sequences.append((pair[0], newVisit))
-    return updated_source_target_sequences, old_to_new_map
+    old_to_new_map = defaultdict(lambda: len(old_to_new_map), {0: 0, 1: 1, 2: 2, 3: 3, 4: 4, 5: 5})
+
+    for pair in source_target_sequences:
+        list_of_visits = []
+        for target_visit in pair[1]:
+            updated_target_visit = []
+            for code in target_visit:
+                updated_target_visit.append(old_to_new_map[code])
+            list_of_visits.append(updated_target_visit)
+        updated_source_target_sequences.append((pair[0], list_of_visits))
+        
+    return updated_source_target_sequences, dict(old_to_new_map)
 
 
-def storeFiles(pair : List[Tuple[List[int], List[int]]], outTypes : Dict[int, int], codeType : Dict[int, str], types : Dict[str, int], reverseTypes : Dict[int, str], outFile: str):
+def filter_codes(source_target_sequences : List[Tuple[List[List[int]], List[List[int]]]], ids_to_types_map: Dict[int, str],
+                 diagnosis: bool = False, procedure : bool = False , drugs : bool = False, reset_target_map : bool = False)\
+    -> Tuple[Tuple[List[List[int]]], Union[Dict[int, int]], None] :
+    """
+    Filters the codes of target sequences to remove indicated types, and flattens the both sequnces.
+
+    Args:
+    - source_target_sequences (list): List of pairs containing the input and output sequences.
+    - ids_to_types_map (dict): Dictionary mapping codes to their corresponding types.
+    - diagnosis (bool): Flag indicating whether to include diagnosis codes in the output. Default is False.
+    - procedure (bool): Flag indicating whether to include procedure codes in the output. Default is False.
+    - drugs (bool): Flag indicating whether to include drug codes in the output. Default is False.
+    - reset_target_map (bool) : !Experimental! Flag indicating whether to remap after deleting the code.
+
+    Returns:
+    - updated_source_target_sequences (list): List of updated pairs containing the special tokens, and flattend
+    - old_to_new_map (dict): a mapping of the old to new codes for the target sequences. 
+    """
+
+    updated_source_target_sequences = []
+
+    if procedure and drugs:
+        print("\nRemoving drug and procedure codes from target sequences")
+        for i, pair in enumerate(source_target_sequences):
+            newOutput = []
+            for code in pair[1]:
+                if ids_to_types_map[code] == 'D' or ids_to_types_map[code] == 'T':
+                    newOutput.append(code)
+
+            if len(newOutput) >= 4:
+                updated_source_target_sequences.append((pair[0], newOutput))
+
+    if drugs and not(procedure):
+        print("\nRemoving only drug codes from target sequences")
+        for i, pair in enumerate(source_target_sequences):
+            newOutput = []
+            for code in pair[1]:
+                if not (ids_to_types_map[code] == 'DR'):
+                    newOutput.append(code)
+            if len(newOutput) >= 4:
+                updated_source_target_sequences.append((pair[0], newOutput))
+
+    if not(diagnosis) and not(procedure) and not(drugs):
+        print("\nkeeping all codes")
+        updated_source_target_sequences = source_target_sequences.copy()
+    
+    if reset_target_map:
+        updated_source_target_sequences, old_to_new_map = reset_integer_output(updated_source_target_sequences)
+        return updated_source_target_sequences, old_to_new_map
+
+    return updated_source_target_sequences, None
+
+
+def store_files(pair : List[Tuple[List[int], List[int]]], outTypes : Dict[int, int], codeType : Dict[int, str], types : Dict[str, int], reverseTypes : Dict[int, str], outFile: str):
     """
     I can't remember what this function does :p 
     """
@@ -185,7 +195,8 @@ def storeFiles(pair : List[Tuple[List[int], List[int]]], outTypes : Dict[int, in
     pickle.dump(reverseOutTypes, open(os.path.join(outFile, 'data.reverseOutTypes'), 'wb'), -1)
 
 
-def AddSpecialTokens(source_target_sequences: List[Tuple[List[int], List[int]]], tokens_to_ids_map: Dict[str, int], truncate : Optional[bool] = False, pad : Optional[bool] = False, input_max_length: Optional[int] = None , output_max_length: Optional[int] = None) -> List[Tuple[List[List[int]]]]:
+def prepare_sequences(source_target_sequences: List[Tuple[List[int], List[int]]], tokens_to_ids_map: Dict[str, int], truncate : Optional[bool] = False, pad\
+                      : Optional[bool] = False, input_max_length: Optional[int] = None , target_max_length: Optional[int] = None, ) -> Tuple[List[List[int]], List[List[int]]]:
     """
     Adds special tokens to the input and output sequences in the given list of pairs.
 
@@ -194,14 +205,16 @@ def AddSpecialTokens(source_target_sequences: List[Tuple[List[int], List[int]]],
         tokens_to_ids_map (Dict[str,int]): A dictionary containing special tokens.
         truncate (Optional[bool]): If True, truncates sequences to `input_max_length` or `output_max_length` if provided.
         pad (Optional[bool]): If True, pads sequences to `input_max_length` or `output_max_length` if provided.
-        input_max_length (Optional[int]): Maximum length for input sequences.
-        output_max_length (Optional[int]): Maximum length for output sequences.
+        source_max_length (Optional[int]): Maximum length for source sequences.
+        target_max_length (Optional[int]): Maximum length for target sequences.
 
     Returns:
-        List[Tuple[List[List[int]]]]: A new list of pairs with special tokens added to the input source and target sequence.
+        Tuple[List[List[int]], List[List[int]]]: Lists of formated source and target sequences.
     """
     
-    updated_source_target_sequences = []
+    updated_source_sequences = []
+    updated_target_sequences = []
+
     for pair in source_target_sequences:
         input_sequences, output_sequences = pair
         input_sequence_spec, output_sequence_spec = [], []
@@ -225,12 +238,56 @@ def AddSpecialTokens(source_target_sequences: List[Tuple[List[int], List[int]]],
                 input_sequence_spec += [tokens_to_ids_map['PAD']] * (input_max_length - len(input_sequence_spec))
         
         # Truncate or pad output sequence
-        if output_max_length is not None:
+        if target_max_length is not None:
             if truncate:
-                output_sequence_spec = output_sequence_spec[:output_max_length]
+                output_sequence_spec = output_sequence_spec[:target_max_length]
             if pad:
-                output_sequence_spec += [tokens_to_ids_map['PAD']] * (output_max_length - len(output_sequence_spec))
-        updated_source_target_sequences.append((input_sequence_spec, output_sequence_spec))
-            
+                output_sequence_spec += [tokens_to_ids_map['PAD']] * (target_max_length - len(output_sequence_spec))
         
-    return updated_source_target_sequences
+        updated_source_sequences.append(input_sequence_spec)
+        updated_target_sequences.append(output_sequence_spec)
+        
+    return updated_source_sequences, updated_target_sequences
+
+def train_test_val_split(source_sequences : List[List[int]], target_sequences : List[List[int]],
+                test_size : float = 0.05, valid_size : float = 0.05, random_state = None)\
+    -> Tuple[Tuple[List[int], List[int]], Tuple[List[int], List[int]], Tuple[List[int], List[int]]]:
+    """
+    Generates the train, test, validation splits for botht source sequences, and target sequences
+
+    Args:
+        source_sequences (list): list of source sequences.
+        target_sequences (list): list of target sequences.
+        test_size (flaot): the fraction of the test set
+        valid_size (flaot): the fraction of the test set
+        random_state (int): Seed for random number generation.
+
+    Returns:
+        Tuple[Tuple[List[int], List[int]], Tuple[List[int], List[int]], Tuple[List[int], List[int]]]:
+          A tuple containing the train, test, and validation splits for both source and target sequences.
+        
+        
+    """
+    # Validate inputs
+    if not 0 <= test_size <= 1 or not 0 <= valid_size <= 1:
+        raise ValueError("test_size and valid_size must be in the range [0, 1].")
+    
+    if random_state is not None:
+        np.random.seed(random_state)
+    
+    source_sequences = np.array(source_sequences)
+    target_sequences = np.array(target_sequences)
+    dataSize = len(source_sequences)
+    idx = np.random.permutation(dataSize)
+    nTest = int(np.ceil(test_size * dataSize))
+    nValid = int(np.ceil(valid_size * dataSize))
+    
+    test_idx = idx[:nTest]
+    valid_idx = idx[nTest:nTest+nValid]
+    train_idx = idx[nTest+nValid:]
+
+    train = (source_sequences[train_idx], target_sequences[train_idx])
+    test = (source_sequences[test_idx], target_sequences[test_idx])
+    valid = (source_sequences[valid_idx], target_sequences[valid_idx]) 
+    
+    return (train, test, valid)

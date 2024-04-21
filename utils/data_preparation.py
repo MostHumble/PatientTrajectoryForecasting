@@ -159,7 +159,7 @@ def load_mimic_data(admissionFile : str, diagnosisFile : str, procedureFile : st
     drugDescription, admDrugMap = get_drugs_from_mimic_file(prescriptionFile, choice)
     return subject_idAdmMap,admDxMap,admPxMap,admDrugMap,drugDescription
 
-def ListAvgVisit(dic: Dict[int, List[int]]) -> float:
+def list_avg_visit(dic: Dict[int, List[int]]) -> float:
     a =[len(intList) for k,intList in dic.items()]
     return sum(a)/len(a)
 
@@ -171,14 +171,14 @@ def countCodes(*dicts: Dict[int, List[str]]) -> int:
 def display(pidAdmMap,admDxMap,admPxMap,admDrugMap):
     print(f" Total Number of patients {len(pidAdmMap)}")
     print(f" Total Number of admissions {len(admDxMap)}")
-    print(f" Average number of admissions per patient {ListAvgVisit(pidAdmMap)}")
+    print(f" Average number of admissions per patient {list_avg_visit(pidAdmMap)}")
     print(f" Total Number of diagnosis code {countCodes(admDxMap)}")
     print(f" Total Number of procedure code {countCodes(admPxMap)}")
     print(f" Total Number of drug code {countCodes(admDrugMap)}")
     print(f" Total Number of codes {countCodes(admPxMap) +countCodes(admDxMap)+countCodes(admDrugMap) }")
-    print(f" average Number of procedure code per visit {ListAvgVisit(admPxMap)}")
-    print(f" average Number of diagnosis code per visit {ListAvgVisit(admDxMap)}")
-    print(f" average Number of Drug code per visit {ListAvgVisit(admDrugMap)}")
+    print(f" average Number of procedure code per visit {list_avg_visit(admPxMap)}")
+    print(f" average Number of diagnosis code per visit {list_avg_visit(admDxMap)}")
+    print(f" average Number of Drug code per visit {list_avg_visit(admDrugMap)}")
 
 def updateAdmCodeList(subject_idAdmMap: Dict[int, List[int]], admDxMap:  Dict[int, List[str]], admPxMap : Dict[int, List[str]], admDrugMap :  Dict[int, List[str]]) \
       -> Tuple[Dict[int, List[str]], Dict[int, List[str]], Dict[int, List[str]]]:
@@ -453,14 +453,14 @@ def map_ICD_to_CCSR(mapping : Dict[int, List[int]]) -> Tuple[Dict[int, List[str]
     
     return CodesToInternalMap,missingCodes,set_of_used_codes
 
-def minMaxCodes(dic):
+def min_max_codes(dic):
     countCode = []
     for codes in dic.values():
         countCode.append(len(codes))    
                 
     return min(countCode),max(countCode)
 
-def displayCodeStats(adDx ,adPx,adDrug):
+def display_code_stats(adDx ,adPx,adDrug):
     print(f" Total Number of diagnosis code {countCodes(adDx)}")
     print(f" Total Number of procedure code {countCodes(adPx)}")
     print(f" Total Number of drug code {countCodes(adDrug)}")
@@ -468,13 +468,13 @@ def displayCodeStats(adDx ,adPx,adDrug):
     print(f" Total Number of all codes {countCodes(adDx,adPx,adDrug) }")
 
 
-    print(f" average Number of procedure code per visit {ListAvgVisit(adPx)}")
-    print(f" average Number of diagnosis code per visit {ListAvgVisit(adDx)}")
-    print(f" average Number of drug code per visit {ListAvgVisit(adDrug)}")
+    print(f" average Number of procedure code per visit {list_avg_visit(adPx)}")
+    print(f" average Number of diagnosis code per visit {list_avg_visit(adDx)}")
+    print(f" average Number of drug code per visit {list_avg_visit(adDrug)}")
 
-    print(f" Min. and max. Number of diagnosis code per admission {minMaxCodes(adDx)}")
-    print(f" Min. and max. Number of procedure code  per admission{minMaxCodes(adPx)}")
-    print(f" Min. and max. Number of drug code  per admission {minMaxCodes(adDrug)}")
+    print(f" Min. and max. Number of diagnosis code per admission {min_max_codes(adDx)}")
+    print(f" Min. and max. Number of procedure code  per admission{min_max_codes(adPx)}")
+    print(f" Min. and max. Number of drug code  per admission {min_max_codes(adDrug)}")
 
 def icd_mapping(CCSRDX_file: str, CCSRPCS_file: str, CCSDX_file: str, CCSPX_file: str, D_CCSR_Ref_file: str, P_CCSR_Ref_file: str, adDx: Dict[int, List[int]], adPx: Dict[int, List[int]], adDrug: Dict[int, List[int]], drugDescription: Dict[str, str]) -> Tuple[Dict[int, List[int]], Dict[int, List[int]], Dict[str, str]]:
     """
@@ -512,7 +512,7 @@ def icd_mapping(CCSRDX_file: str, CCSRPCS_file: str, CCSDX_file: str, CCSPX_file
     codeDescription['EOV'] = 'End of visit'
     codeDescription['BOS'] = 'Beginning of sequence'
     codeDescription['PAD'] = 'Padding'
-    displayCodeStats(adDx,adPx,adDrug)
+    display_code_stats(adDx,adPx,adDrug)
     return adDx,adPx,codeDescription
 
 
@@ -544,10 +544,10 @@ def trim(adDx  : Dict[int,List[int]], adPx  : Dict[int,List[int]], adDrug  : Dic
     for admission, DrugCodes in adDrug.items():
         adDrug[admission] = DrugCodes[:max_drg]
         
-    displayCodeStats(adDx, adPx, adDrug)
+    display_code_stats(adDx, adPx, adDrug)
     return adDx, adPx, adDrug
 
-def buildData(subject_idAdmMap : Dict[int, List[int]], adDx: Dict[int, List[int]], adPx: Dict[int, List[int]], adDrug: Dict[int, List[int]], minVisits: int = 2) -> Tuple[List[List[List[int]]], Dict[str, int]]:
+def build_data(subject_idAdmMap : Dict[int, List[int]], adDx: Dict[int, List[int]], adPx: Dict[int, List[int]], adDrug: Dict[int, List[int]], minVisits: int = 2) -> Tuple[List[List[List[int]]], Dict[str, int]]:
     """
     Builds the data for patient trajectory forecasting.
 
@@ -617,7 +617,7 @@ def buildData(subject_idAdmMap : Dict[int, List[int]], adDx: Dict[int, List[int]
         newSeqs.append(newPatient)
     return newSeqs, types
 
-def removeCode(currentSeqs : List[List[List[int]]], types, threshold :int = 5) -> Tuple[List[List[List[int]]], Dict[str, int], Dict[int, str]]:
+def remove_code(currentSeqs : List[List[List[int]]], types, threshold :int = 5) -> Tuple[List[List[List[int]]], Dict[str, int], Dict[int, str]]:
     """
     Removes infrequent codes from the given sequences.
 
@@ -652,7 +652,7 @@ def removeCode(currentSeqs : List[List[List[int]]], types, threshold :int = 5) -
 
     return updatedSeqs, dict(types), reverseTypes
 
-def generateCodeTypes(outFile: str, reverseTypes: Dict[int, str]) -> Dict[str, int] :
+def generate_code_types(outFile: str, reverseTypes: Dict[int, str]) -> Dict[str, int] :
     """
     Generate code types based on reverse types dictionary.
 
@@ -700,7 +700,7 @@ def generateCodeTypes(outFile: str, reverseTypes: Dict[int, str]) -> Dict[str, i
 
     return codeType
 
-def saveFiles(updatedSeqs : List[List[List[int]]], types : Dict[str, int], codeDescription : Dict[str, str], outFile : str = 'outputData/originalData/'):
+def save_files(updatedSeqs : List[List[List[int]]], types : Dict[str, int], codeDescription : Dict[str, str], outFile : str = 'outputData/originalData/'):
     """
     Save the updated sequences, types, and code description to files.
 
