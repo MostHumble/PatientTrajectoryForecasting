@@ -1,0 +1,34 @@
+# Place the mimic-iv & ccs folders in the root folder or edit the line below
+
+# Define root folder
+root_path: /home/USER  # Change this!! Root folder for the project
+
+# Define output directory
+output_path: outputData  # Output directory for processed data
+
+
+# Paths for MIMIC-IV data
+mimic_iv_path: mimic-iv-2.2/hosp  # Path to MIMIC-IV data
+ccs_path: CSS  # Path to CCS directory
+
+# MIMIC-IV data files
+mimic_files:
+  admission_file: admissions.csv.gz  # Admission data file
+  diagnosis_file: diagnoses_icd.csv.gz  # Diagnosis data file
+  procedure_file: procedures_icd.csv.gz  # Procedure data file
+  prescription_file: prescriptions.csv.gz  # Prescription data file
+
+# CCS files
+css_files:
+  CCSRDX_file: DXCCSR_v2021-2.csv  # CCS DX file
+  CCSRPCS_file: PRCCSR_v2021-1.CSV  # CCS Procedure file
+  CCSDX_file: $dxref 2015.csv  # CCSDX file
+  CCSPX_file: $prref 2015.csv  # CCSPX files
+  D_CCSR_Ref_file: DXCCSR-Reference-File-v2021-2.xlsx  # CCS DX reference file
+  P_CCSR_Ref_file: PRCCSR-Reference-File-v2021-1.xlsx  # CCS Procedure reference file
+
+# # Output directories
+output_files:
+  diagnosis_output_file: Inp_d_p_dr_out_d/  # Output directory for diagnosis data
+  diagnosis_procedure_output_file: Inp_d_p_dr_out_d_p/  # Output directory for diagnosis procedure data
+  all_outputs_file: Inp_d_p_dr_out_d_p_dr/  # Output directory for all data
