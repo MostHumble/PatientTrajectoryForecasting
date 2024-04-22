@@ -320,14 +320,14 @@ def get_embedding_size(max_unique : int, len_unique : int, unique_data : set, mu
 
 def get_optimal_embedding_size(source_sequences : List[List[int]], target_sequences : List[List[int]], multiplier :int = 64) -> Dict[str, Union[set, int]]:
     """
-    Get the unique elements in the given sequences and calculate optimal embedding size.
+    Get the unique elements in the given sequences and calculate optimal embedding size, creates corresponding mapping if needed.
 
     Args:
         source_sequences (list): List of source sequences.
         target_sequences (list): List of target sequences.
         multiplier (int): The multiplier to use for the embedding size.
     Returns:
-        Dict[str, Union[set, int]]: A dictionary containing the unique elements in the source and target sequences, the number of unique elements in each sequence, and the maximum element in each sequence.
+        Dict[str,Union[int, int, list, list, dict, dict]]: A dictionary containing the optimal embedding size for the source and target sequences, the source and target sequences, and the mapping of the new codes to old codes.
     """
     # Flatten the lists of lists
     source_flat = [item for sublist in source_sequences for item in sublist]
@@ -347,13 +347,21 @@ def get_optimal_embedding_size(source_sequences : List[List[int]], target_sequen
     embedding_size_source, mapping_source = get_embedding_size(max_unique_source, len_unique_source, unique_source, multiplier)
     embedding_size_target, mapping_target = get_embedding_size(max_unique_target, len_unique_target, unique_target, multiplier)
 
+    if mapping_source is not None:
+        source_sequences = [[mapping_source[code] for code in sequence] for sequence in source_sequences]
+        mapping_source = {v: k for k, v in mapping_source.items()}
+    if mapping_target is not None:
+        target_sequences = [[mapping_target[code] for code in sequence] for sequence in target_sequences]
+        mapping_target = {v: k for k, v in mapping_target.items()}
+
     data_properties['embedding_size_source'] = embedding_size_source
     data_properties['embedding_size_target'] = embedding_size_target
-    data_properties['mapping_source'] = mapping_source
-    data_properties['mapping_target'] = mapping_target
+    data_properties['source_sequences'] = source_sequences
+    data_properties['target_sequences'] = target_sequences
+    data_properties['new_to_old_ids_source'] = mapping_source
+    data_properties['new_to_old_ids_target'] = mapping_target
     
     return data_properties
-
 
 def get_embedding_size(max_unique : int, len_unique : int, unique_data : set, multiplier :int) -> Tuple[int, Optional[Dict[int, int]]]:
     """
