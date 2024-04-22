@@ -17,8 +17,6 @@ def load_data(path: str = 'outputData/originalData/' , updated_ids_to_types : bo
             - The third element is a dictionary mapping event codes to their corresponding types.
             - The fourth element is a dictionary mapping event codes to their corresponding types (reversed mapping).
         """
-        # load the data again
-
         if train:
 
             source_target_sequences = pickle.load(open(os.path.join(path, 'data.source_target_sequences'), 'rb'))
@@ -26,7 +24,7 @@ def load_data(path: str = 'outputData/originalData/' , updated_ids_to_types : bo
             tokens_to_ids_map = pickle.load(open(os.path.join(path, 'data.tokens_to_ids_map'), 'rb'))
             ids_to_tokens_map = pickle.load(open(os.path.join(path, 'data.ids_to_tokens_map'), 'rb'))
 
-            if updated_ids_to_types is not None:
+            if updated_ids_to_types:
                 updated_ids_to_types =  pickle.load(open(os.path.join(path, 'data.updated_ids_to_types'), 'rb'))
                 reverse_up_ids_to_types =  pickle.load(open(os.path.join(path, 'data.reverse_up_ids_to_types'), 'rb'))
                 return source_target_sequences, ids_to_types_map, tokens_to_ids_map, ids_to_tokens_map, updated_ids_to_types, reverse_up_ids_to_types

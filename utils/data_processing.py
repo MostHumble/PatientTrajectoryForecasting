@@ -4,27 +4,6 @@ import numpy as np
 from collections import defaultdict
 from typing import Dict, Optional, Tuple, List, Union
 
-def load_data(path: str) -> Tuple[List[List[List[int]]], Dict[str, int], Dict[str, int], Dict[int, str]]:
-        """
-        Load data from the specified file.
-
-        Args:
-        - path (str): The path to the file containing the data.
-
-        Returns:
-        - Tuple[List[List[List[int]]], Dict[str, ], Dict[str, int], Dict[int, str]]: A tuple containing the loaded data.
-            - The first element is a list of sequences, where each sequence is a list of events, and each event is a list of integers.
-            - The second element is a dictionary mapping event types to their corresponding codes.
-            - The third element is a dictionary mapping event codes to their corresponding types.
-            - The fourth element is a dictionary mapping event codes to their corresponding types (reversed mapping).
-        """
-        # load the data again
-        seqs = pickle.load(open(os.path.join(path, 'data.seqs'), 'rb'))
-        types = pickle.load(open(os.path.join(path, 'data.types'), 'rb'))
-        codeType = pickle.load(open(os.path.join(path, 'data.codeType'), 'rb'))
-        reverseTypes = {v: k for k, v in types.items()}
-        return seqs, types, codeType, reverseTypes
-
 def list_tuples(x : List[List[int]], y : List[List[int]]) -> List[Tuple[List[int], List[int]]]:
     pairs = []
     for i, a in enumerate(zip(x,y)):
@@ -125,8 +104,8 @@ def reset_integer_output(source_target_sequences: List[List[int]]) -> Tuple[List
     return updated_source_target_sequences, dict(old_to_new_map)
 
 
-def filter_codes(source_target_sequences : List[Tuple[List[List[int]], List[List[int]]]], ids_to_types_map: Dict[int, str],
-                 diagnosis: bool = False, procedure : bool = False , drugs : bool = False, reset_target_map : bool = False)\
+def filter_codes(source_target_sequences : List[Tuple[List[List[int]], List[List[int]]]], ids_to_types_map: Dict[int, str],\
+                  procedure : bool = False , drugs : bool = False, reset_target_map : bool = False)\
     -> Tuple[Tuple[List[List[int]]], Union[Dict[int, int]], None] :
     """
     Filters the codes of target sequences to remove indicated types, and flattens the both sequnces.
@@ -134,9 +113,8 @@ def filter_codes(source_target_sequences : List[Tuple[List[List[int]], List[List
     Args:
     - source_target_sequences (list): List of pairs containing the input and output sequences.
     - ids_to_types_map (dict): Dictionary mapping codes to their corresponding types.
-    - diagnosis (bool): Flag indicating whether to include diagnosis codes in the output. Default is False.
-    - procedure (bool): Flag indicating whether to include procedure codes in the output. Default is False.
-    - drugs (bool): Flag indicating whether to include drug codes in the output. Default is False.
+    - procedure (bool): Flag indicating whether to remove procedure codes in the output. Default is False.
+    - drugs (bool): Flag indicating whether to remove drug codes in the output. Default is False.
     - reset_target_map (bool) : !Experimental! Flag indicating whether to remap after deleting the code.
 
     Returns:
@@ -148,26 +126,42 @@ def filter_codes(source_target_sequences : List[Tuple[List[List[int]], List[List
 
     if procedure and drugs:
         print("\nRemoving drug and procedure codes from target sequences")
-        for i, pair in enumerate(source_target_sequences):
-            newOutput = []
-            for code in pair[1]:
-                if ids_to_types_map[code] == 'D' or ids_to_types_map[code] == 'T':
-                    newOutput.append(code)
-
-            if len(newOutput) >= 4:
-                updated_source_target_sequences.append((pair[0], newOutput))
+        for pair in source_target_sequences:
+            list_of_target_visits = []
+            for target_visit in pair[1]:
+                updated_target_visit = []
+                for code in target_visit:
+                    if not (ids_to_types_map[code] == 'P' or ids_to_types_map[code] == 'DR'):
+                        updated_target_visit.append(code)
+                list_of_target_visits.append(updated_target_visit)
+            updated_source_target_sequences.append((pair[0], list_of_target_visits))
+            
 
     if drugs and not(procedure):
-        print("\nRemoving only drug codes from target sequences")
-        for i, pair in enumerate(source_target_sequences):
-            newOutput = []
-            for code in pair[1]:
-                if not (ids_to_types_map[code] == 'DR'):
-                    newOutput.append(code)
-            if len(newOutput) >= 4:
-                updated_source_target_sequences.append((pair[0], newOutput))
+        print("\nOnly removing drug codes from target sequences")
+        for pair in source_target_sequences:
+            list_of_target_visits = []
+            for target_visit in pair[1]:
+                updated_target_visit = []
+                for code in target_visit:
+                    if not (ids_to_types_map[code] == 'DR'):
+                        updated_target_visit.append(code)
+                list_of_target_visits.append(updated_target_visit)
+            updated_source_target_sequences.append((pair[0], list_of_target_visits))
 
-    if not(diagnosis) and not(procedure) and not(drugs):
+    if not(drugs) and procedure:
+        print("\Only removing procedure codes from target sequences")
+        for pair in source_target_sequences:
+            list_of_target_visits = []
+            for target_visit in pair[1]:
+                updated_target_visit = []
+                for code in target_visit:
+                    if not (ids_to_types_map[code] == 'P'):
+                        updated_target_visit.append(code)
+                list_of_target_visits.append(updated_target_visit)
+            updated_source_target_sequences.append((pair[0], list_of_target_visits))
+
+    if not(procedure) and not(drugs):
         print("\nkeeping all codes")
         updated_source_target_sequences = source_target_sequences.copy()
     
@@ -178,25 +172,12 @@ def filter_codes(source_target_sequences : List[Tuple[List[List[int]], List[List
     return updated_source_target_sequences, None
 
 
-def store_files(pair : List[Tuple[List[int], List[int]]], outTypes : Dict[int, int], codeType : Dict[int, str], types : Dict[str, int], reverseTypes : Dict[int, str], outFile: str):
-    """
-    I can't remember what this function does :p 
-    """
-    if not os.path.exists(outFile):
-        os.makedirs(outFile)
-    print(f"dumping in {os.path.join(outFile)}")
-
-    pickle.dump(pair, open(os.path.join(outFile, 'data.seqs'), 'wb'), -1)
-    pickle.dump(outTypes, open(os.path.join(outFile, 'data.outTypes'), 'wb'), -1)
-    pickle.dump(codeType, open(os.path.join(outFile, 'data.codeType'), 'wb'), -1)
-    pickle.dump(types, open(os.path.join(outFile, 'data.types'), 'wb'), -1)
-    pickle.dump(reverseTypes, open(os.path.join(outFile, 'data.reverseTypes'), 'wb'), -1)
-    reverseOutTypes = {v: k for k, v in outTypes.items()}
-    pickle.dump(reverseOutTypes, open(os.path.join(outFile, 'data.reverseOutTypes'), 'wb'), -1)
 
 
-def prepare_sequences(source_target_sequences: List[Tuple[List[int], List[int]]], tokens_to_ids_map: Dict[str, int], truncate : Optional[bool] = False, pad\
-                      : Optional[bool] = False, input_max_length: Optional[int] = None , target_max_length: Optional[int] = None, ) -> Tuple[List[List[int]], List[List[int]]]:
+
+def prepare_sequences(source_target_sequences: List[Tuple[List[int], List[int]]], tokens_to_ids_map: Dict[str, int], truncate : Optional[bool] = False,
+                       pad: Optional[bool] = False, input_max_length: Optional[int] = None ,
+                        target_max_length: Optional[int] = None ) -> Tuple[List[List[int]], List[List[int]]]:
     """
     Adds special tokens to the input and output sequences in the given list of pairs.
 

@@ -113,7 +113,7 @@ def get_ICDs_from_mimic_file(fileName: str, isdiagnosis: bool = True) -> Dict[in
     print ('-Number of null ICD10 codes in file ' + fileName + ': ' + str(number_of_null_ICD10_codes))
     return mapping
 
-def load_mimic_data(admissionFile : str, diagnosisFile : str, procedureFile : str, prescriptionFile : str, choice : Optional[str] = 'ndc') \
+def load_mimic_data(admission_file : str, diagnosis_file : str, procedure_file : str, prescription_file : str, choice : Optional[str] = 'ndc', **kw) \
     -> Tuple[Dict[int,List[int]], Dict[int,List[int]], Dict[int,List[int]], Dict[int,List[int]], Dict[str, str]]:
     """
     Loads MIMIC data and returns various mappings.
@@ -129,12 +129,9 @@ def load_mimic_data(admissionFile : str, diagnosisFile : str, procedureFile : st
     - drugDescription (dict): A dictionary mapping drug codes to drug descriptions.
     """
     print ('Building subject_id-admission mapping, admission-date mapping')
-    previous_subject = 0
-    previous_admission = 0
+
     subject_idAdmMap = {}
-    admDateMap = {}
-    subject_idStatic = {}   # adm type, Insurance , ethnicity , marital status
-    infd = gzip.open(admissionFile, 'r')
+    infd = gzip.open(admission_file, 'r')
     infd.readline()
     for line in infd:
         tokens = line.decode('utf-8').strip().split(',')
@@ -150,13 +147,13 @@ def load_mimic_data(admissionFile : str, diagnosisFile : str, procedureFile : st
     infd.close()
 
     print ('Building admission-diagnosis mapping')
-    admDxMap = get_ICDs_from_mimic_file(diagnosisFile)
+    admDxMap = get_ICDs_from_mimic_file(diagnosis_file)
 
     print ('Building admission-procedure mapping')
-    admPxMap = get_ICDs_from_mimic_file(procedureFile, isdiagnosis=False)
+    admPxMap = get_ICDs_from_mimic_file(procedure_file, isdiagnosis=False)
 
     print ('Building admission-drug mapping')
-    drugDescription, admDrugMap = get_drugs_from_mimic_file(prescriptionFile, choice)
+    drugDescription, admDrugMap = get_drugs_from_mimic_file(prescription_file, choice)
     return subject_idAdmMap,admDxMap,admPxMap,admDrugMap,drugDescription
 
 def list_avg_visit(dic: Dict[int, List[int]]) -> float:
@@ -476,7 +473,9 @@ def display_code_stats(adDx ,adPx,adDrug):
     print(f" Min. and max. Number of procedure code  per admission{min_max_codes(adPx)}")
     print(f" Min. and max. Number of drug code  per admission {min_max_codes(adDrug)}")
 
-def icd_mapping(CCSRDX_file: str, CCSRPCS_file: str, CCSDX_file: str, CCSPX_file: str, D_CCSR_Ref_file: str, P_CCSR_Ref_file: str, adDx: Dict[int, List[int]], adPx: Dict[int, List[int]], adDrug: Dict[int, List[int]], drugDescription: Dict[str, str]) -> Tuple[Dict[int, List[int]], Dict[int, List[int]], Dict[str, str]]:
+def icd_mapping(CCSRDX_file: str, CCSRPCS_file: str, CCSDX_file: str, CCSPX_file: str, D_CCSR_Ref_file: str, P_CCSR_Ref_file: str,\
+                 adDx: Dict[int, List[int]], adPx: Dict[int, List[int]], adDrug: Dict[int, List[int]],\
+                      drugDescription: Dict[str, str], **kw) -> Tuple[Dict[int, List[int]], Dict[int, List[int]], Dict[str, str]]:
     """
     Maps ICD codes to CCS and CCSR codes and returns the mapped diagnosis codes, procedure codes, and code descriptions.
 
@@ -652,13 +651,13 @@ def remove_code(currentSeqs : List[List[List[int]]], types, threshold :int = 5) 
 
     return updatedSeqs, dict(types), reverseTypes
 
-def generate_code_types(outFile: str, reverseTypes: Dict[int, str]) -> Dict[str, int] :
+def generate_code_types(reverseTypes: Dict[int, str], outFile : str = 'outputData/originalData/') -> Dict[str, int] :
     """
     Generate code types based on reverse types dictionary.
 
-    Args:
-    - outFile (str): The name of the output file.
+    Args:.
     - reverseTypes (Dict[int, str]): A dictionary containing reverse types.
+    - outFile (str): The name of the output file
 
     Returns:
     - codeType (Dict[str, int]): A dictionary containing the generated code types.
@@ -695,8 +694,8 @@ def generate_code_types(outFile: str, reverseTypes: Dict[int, str]) -> Dict[str,
             if found == 0:
                 print(keys, values)
 
-    print(countD, countP, countDr, countT)
-    pickle.dump(codeType, open(os.path.join(outFile , 'data.codeType'), 'wb'), -1)
+    print(f'Number of Diagnosis codes: {countD}, Procedure codes: {countP}, Drug codes: {countDr}, special codes: {countT}')
+    pickle.dump(codeType, open(os.path.join(outFile , 'data.code_types'), 'wb'), -1)
 
     return codeType
 
