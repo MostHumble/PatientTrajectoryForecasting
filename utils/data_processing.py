@@ -272,3 +272,106 @@ def train_test_val_split(source_sequences : List[List[int]], target_sequences : 
     valid = (source_sequences[valid_idx], target_sequences[valid_idx]) 
     
     return (train, test, valid)
+
+
+def get_optimal_embedding_size(source_sequences : List[List[int]], target_sequences : List[List[int]]) -> Dict[str, Union[set, int]]:
+    """
+    Get the unique elements in the given sequences.
+
+    Args:
+        source_sequences (list): List of source sequences.
+        target_sequences (list): List of target sequences.
+    Returns:
+        Dict[str, Union[set, int]]: A dictionary containing the unique elements in the source and target sequences, the number of unique elements in each sequence, and the maximum element in each sequence.
+    """
+    # Flatten the lists of lists
+    source_flat = [item for sublist in source_sequences for item in sublist]
+    target_flat = [item for sublist in target_sequences for item in sublist]
+    
+    # Create sets of unique elements
+    unique_source = set(source_flat)
+    unique_target = set(target_flat)
+
+    len_unique_source = len(unique_source)
+    len_unique_target = len(unique_target)
+    max_unique_source = max(unique_source)
+    max_unique_target = max(unique_target)
+    
+    data_properties = {
+        'unique_source': unique_source,
+        'unique_target': unique_target,
+        'len_unique_source': len_unique_source,
+        'len_unique_target': len_unique_target,
+        'max_unique_source': max_unique_source,
+        'max_unique_target': max_unique_target
+    }
+
+
+
+def get_embedding_size(max_unique : int, len_unique : int, unique_data : set, multiplier :int = 64) -> Tuple[int, Optional[Dict[int, int]]]:
+    if max_unique - multiplier > len_unique:
+        print('must reformat, too much memory would be lost in embedding')
+        # create a new mapping of the codes to the new codes
+        old_ids_to_new_mapping = {code: i for i, code in enumerate(unique_data)}
+        return (len(old_ids_to_new_mapping) // multiplier + 1) * multiplier, old_ids_to_new_mapping
+    else:
+        # create the embedding size that is rounded to the nearest multiple of 64 of the max unique
+        return (max_unique // multiplier + 1) * multiplier, None
+
+def get_optimal_embedding_size(source_sequences : List[List[int]], target_sequences : List[List[int]], multiplier :int = 64) -> Dict[str, Union[set, int]]:
+    """
+    Get the unique elements in the given sequences and calculate optimal embedding size.
+
+    Args:
+        source_sequences (list): List of source sequences.
+        target_sequences (list): List of target sequences.
+        multiplier (int): The multiplier to use for the embedding size.
+    Returns:
+        Dict[str, Union[set, int]]: A dictionary containing the unique elements in the source and target sequences, the number of unique elements in each sequence, and the maximum element in each sequence.
+    """
+    # Flatten the lists of lists
+    source_flat = [item for sublist in source_sequences for item in sublist]
+    target_flat = [item for sublist in target_sequences for item in sublist]
+    
+    # Create sets of unique elements
+    unique_source = set(source_flat)
+    unique_target = set(target_flat)
+
+    len_unique_source = len(unique_source)
+    len_unique_target = len(unique_target)
+    max_unique_source = max(unique_source)
+    max_unique_target = max(unique_target)
+    
+    data_properties = {}
+
+    embedding_size_source, mapping_source = get_embedding_size(max_unique_source, len_unique_source, unique_source, multiplier)
+    embedding_size_target, mapping_target = get_embedding_size(max_unique_target, len_unique_target, unique_target, multiplier)
+
+    data_properties['embedding_size_source'] = embedding_size_source
+    data_properties['embedding_size_target'] = embedding_size_target
+    data_properties['mapping_source'] = mapping_source
+    data_properties['mapping_target'] = mapping_target
+    
+    return data_properties
+
+
+def get_embedding_size(max_unique : int, len_unique : int, unique_data : set, multiplier :int) -> Tuple[int, Optional[Dict[int, int]]]:
+    """
+    Get the optimal embedding size for the given data.
+
+    Args:
+        max_unique (int): The maximum unique element in the data.
+        len_unique (int): The number of unique elements in the data.
+        unique_data (set): The set of unique elements in the data.
+        multiplier (int): The multiplier to use for the embedding size.
+    Returns:
+        Tuple[int, Optional[Dict[int, int]]]: A tuple containing the optimal embedding size and a mapping of the old to new codes if the data needs to be reformatted.
+    """
+    if max_unique - multiplier > len_unique:
+        print('must reformat, too much memory would be lost in embedding')
+        # create a new mapping of the codes to the new codes
+        old_ids_to_new_mapping = {code: i for i, code in enumerate(unique_data)}
+        return (len(old_ids_to_new_mapping) // multiplier + 1) * multiplier, old_ids_to_new_mapping
+    else:
+        # create the embedding size that is rounded to the nearest multiple of 64 of the max unique
+        return (max_unique // multiplier + 1) * multiplier, None
