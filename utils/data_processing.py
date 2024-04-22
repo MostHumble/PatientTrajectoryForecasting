@@ -4,27 +4,6 @@ import numpy as np
 from collections import defaultdict
 from typing import Dict, Optional, Tuple, List, Union
 
-def load_data(path: str) -> Tuple[List[List[List[int]]], Dict[str, int], Dict[str, int], Dict[int, str]]:
-        """
-        Load data from the specified file.
-
-        Args:
-        - path (str): The path to the file containing the data.
-
-        Returns:
-        - Tuple[List[List[List[int]]], Dict[str, ], Dict[str, int], Dict[int, str]]: A tuple containing the loaded data.
-            - The first element is a list of sequences, where each sequence is a list of events, and each event is a list of integers.
-            - The second element is a dictionary mapping event types to their corresponding codes.
-            - The third element is a dictionary mapping event codes to their corresponding types.
-            - The fourth element is a dictionary mapping event codes to their corresponding types (reversed mapping).
-        """
-        # load the data again
-        seqs = pickle.load(open(os.path.join(path, 'data.seqs'), 'rb'))
-        types = pickle.load(open(os.path.join(path, 'data.types'), 'rb'))
-        codeType = pickle.load(open(os.path.join(path, 'data.codeType'), 'rb'))
-        reverseTypes = {v: k for k, v in types.items()}
-        return seqs, types, codeType, reverseTypes
-
 def list_tuples(x : List[List[int]], y : List[List[int]]) -> List[Tuple[List[int], List[int]]]:
     pairs = []
     for i, a in enumerate(zip(x,y)):
@@ -125,8 +104,8 @@ def reset_integer_output(source_target_sequences: List[List[int]]) -> Tuple[List
     return updated_source_target_sequences, dict(old_to_new_map)
 
 
-def filter_codes(source_target_sequences : List[Tuple[List[List[int]], List[List[int]]]], ids_to_types_map: Dict[int, str],
-                 diagnosis: bool = False, procedure : bool = False , drugs : bool = False, reset_target_map : bool = False)\
+def filter_codes(source_target_sequences : List[Tuple[List[List[int]], List[List[int]]]], ids_to_types_map: Dict[int, str],\
+                  procedure : bool = False , drugs : bool = False, reset_target_map : bool = False)\
     -> Tuple[Tuple[List[List[int]]], Union[Dict[int, int]], None] :
     """
     Filters the codes of target sequences to remove indicated types, and flattens the both sequnces.
@@ -134,9 +113,8 @@ def filter_codes(source_target_sequences : List[Tuple[List[List[int]], List[List
     Args:
     - source_target_sequences (list): List of pairs containing the input and output sequences.
     - ids_to_types_map (dict): Dictionary mapping codes to their corresponding types.
-    - diagnosis (bool): Flag indicating whether to include diagnosis codes in the output. Default is False.
-    - procedure (bool): Flag indicating whether to include procedure codes in the output. Default is False.
-    - drugs (bool): Flag indicating whether to include drug codes in the output. Default is False.
+    - procedure (bool): Flag indicating whether to remove procedure codes in the output. Default is False.
+    - drugs (bool): Flag indicating whether to remove drug codes in the output. Default is False.
     - reset_target_map (bool) : !Experimental! Flag indicating whether to remap after deleting the code.
 
     Returns:
@@ -148,26 +126,42 @@ def filter_codes(source_target_sequences : List[Tuple[List[List[int]], List[List
 
     if procedure and drugs:
         print("\nRemoving drug and procedure codes from target sequences")
-        for i, pair in enumerate(source_target_sequences):
-            newOutput = []
-            for code in pair[1]:
-                if ids_to_types_map[code] == 'D' or ids_to_types_map[code] == 'T':
-                    newOutput.append(code)
-
-            if len(newOutput) >= 4:
-                updated_source_target_sequences.append((pair[0], newOutput))
+        for pair in source_target_sequences:
+            list_of_target_visits = []
+            for target_visit in pair[1]:
+                updated_target_visit = []
+                for code in target_visit:
+                    if not (ids_to_types_map[code] == 'P' or ids_to_types_map[code] == 'DR'):
+                        updated_target_visit.append(code)
+                list_of_target_visits.append(updated_target_visit)
+            updated_source_target_sequences.append((pair[0], list_of_target_visits))
+            
 
     if drugs and not(procedure):
-        print("\nRemoving only drug codes from target sequences")
-        for i, pair in enumerate(source_target_sequences):
-            newOutput = []
-            for code in pair[1]:
-                if not (ids_to_types_map[code] == 'DR'):
-                    newOutput.append(code)
-            if len(newOutput) >= 4:
-                updated_source_target_sequences.append((pair[0], newOutput))
+        print("\nOnly removing drug codes from target sequences")
+        for pair in source_target_sequences:
+            list_of_target_visits = []
+            for target_visit in pair[1]:
+                updated_target_visit = []
+                for code in target_visit:
+                    if not (ids_to_types_map[code] == 'DR'):
+                        updated_target_visit.append(code)
+                list_of_target_visits.append(updated_target_visit)
+            updated_source_target_sequences.append((pair[0], list_of_target_visits))
 
-    if not(diagnosis) and not(procedure) and not(drugs):
+    if not(drugs) and procedure:
+        print("\Only removing procedure codes from target sequences")
+        for pair in source_target_sequences:
+            list_of_target_visits = []
+            for target_visit in pair[1]:
+                updated_target_visit = []
+                for code in target_visit:
+                    if not (ids_to_types_map[code] == 'P'):
+                        updated_target_visit.append(code)
+                list_of_target_visits.append(updated_target_visit)
+            updated_source_target_sequences.append((pair[0], list_of_target_visits))
+
+    if not(procedure) and not(drugs):
         print("\nkeeping all codes")
         updated_source_target_sequences = source_target_sequences.copy()
     
@@ -178,25 +172,12 @@ def filter_codes(source_target_sequences : List[Tuple[List[List[int]], List[List
     return updated_source_target_sequences, None
 
 
-def store_files(pair : List[Tuple[List[int], List[int]]], outTypes : Dict[int, int], codeType : Dict[int, str], types : Dict[str, int], reverseTypes : Dict[int, str], outFile: str):
-    """
-    I can't remember what this function does :p 
-    """
-    if not os.path.exists(outFile):
-        os.makedirs(outFile)
-    print(f"dumping in {os.path.join(outFile)}")
-
-    pickle.dump(pair, open(os.path.join(outFile, 'data.seqs'), 'wb'), -1)
-    pickle.dump(outTypes, open(os.path.join(outFile, 'data.outTypes'), 'wb'), -1)
-    pickle.dump(codeType, open(os.path.join(outFile, 'data.codeType'), 'wb'), -1)
-    pickle.dump(types, open(os.path.join(outFile, 'data.types'), 'wb'), -1)
-    pickle.dump(reverseTypes, open(os.path.join(outFile, 'data.reverseTypes'), 'wb'), -1)
-    reverseOutTypes = {v: k for k, v in outTypes.items()}
-    pickle.dump(reverseOutTypes, open(os.path.join(outFile, 'data.reverseOutTypes'), 'wb'), -1)
 
 
-def prepare_sequences(source_target_sequences: List[Tuple[List[int], List[int]]], tokens_to_ids_map: Dict[str, int], truncate : Optional[bool] = False, pad\
-                      : Optional[bool] = False, input_max_length: Optional[int] = None , target_max_length: Optional[int] = None, ) -> Tuple[List[List[int]], List[List[int]]]:
+
+def prepare_sequences(source_target_sequences: List[Tuple[List[int], List[int]]], tokens_to_ids_map: Dict[str, int], truncate : Optional[bool] = False,
+                       pad: Optional[bool] = False, input_max_length: Optional[int] = None ,
+                        target_max_length: Optional[int] = None ) -> Tuple[List[List[int]], List[List[int]]]:
     """
     Adds special tokens to the input and output sequences in the given list of pairs.
 
@@ -286,8 +267,119 @@ def train_test_val_split(source_sequences : List[List[int]], target_sequences : 
     valid_idx = idx[nTest:nTest+nValid]
     train_idx = idx[nTest+nValid:]
 
-    train = (source_sequences[train_idx], target_sequences[train_idx])
-    test = (source_sequences[test_idx], target_sequences[test_idx])
-    valid = (source_sequences[valid_idx], target_sequences[valid_idx]) 
+    train = {'source_sequences': source_sequences[train_idx], 'target_sequences' : target_sequences[train_idx]}
+    test = {'source_sequences': source_sequences[test_idx],  'target_sequences' : target_sequences[test_idx]}
+    valid = {'source_sequences':  source_sequences[valid_idx], 'target_sequences' : target_sequences[valid_idx]}
     
     return (train, test, valid)
+
+
+def get_optimal_embedding_size(source_sequences : List[List[int]], target_sequences : List[List[int]]) -> Dict[str, Union[set, int]]:
+    """
+    Get the unique elements in the given sequences.
+
+    Args:
+        source_sequences (list): List of source sequences.
+        target_sequences (list): List of target sequences.
+    Returns:
+        Dict[str, Union[set, int]]: A dictionary containing the unique elements in the source and target sequences, the number of unique elements in each sequence, and the maximum element in each sequence.
+    """
+    # Flatten the lists of lists
+    source_flat = [item for sublist in source_sequences for item in sublist]
+    target_flat = [item for sublist in target_sequences for item in sublist]
+    
+    # Create sets of unique elements
+    unique_source = set(source_flat)
+    unique_target = set(target_flat)
+
+    len_unique_source = len(unique_source)
+    len_unique_target = len(unique_target)
+    max_unique_source = max(unique_source)
+    max_unique_target = max(unique_target)
+    
+    data_properties = {
+        'unique_source': unique_source,
+        'unique_target': unique_target,
+        'len_unique_source': len_unique_source,
+        'len_unique_target': len_unique_target,
+        'max_unique_source': max_unique_source,
+        'max_unique_target': max_unique_target
+    }
+
+
+
+def get_embedding_size(max_unique : int, len_unique : int, unique_data : set, multiplier :int = 64) -> Tuple[int, Optional[Dict[int, int]]]:
+    if max_unique - multiplier > len_unique:
+        print('must reformat, too much memory would be lost in embedding')
+        # create a new mapping of the codes to the new codes
+        old_ids_to_new_mapping = {code: i for i, code in enumerate(unique_data)}
+        return (len(old_ids_to_new_mapping) // multiplier + 1) * multiplier, old_ids_to_new_mapping
+    else:
+        # create the embedding size that is rounded to the nearest multiple of 64 of the max unique
+        return (max_unique // multiplier + 1) * multiplier, None
+
+def get_optimal_embedding_size(source_sequences : List[List[int]], target_sequences : List[List[int]], multiplier :int = 64) -> Dict[str, Union[set, int]]:
+    """
+    Get the unique elements in the given sequences and calculate optimal embedding size, creates corresponding mapping if needed.
+
+    Args:
+        source_sequences (list): List of source sequences.
+        target_sequences (list): List of target sequences.
+        multiplier (int): The multiplier to use for the embedding size.
+    Returns:
+        Dict[str,Union[int, int, list, list, dict, dict]]: A dictionary containing the optimal embedding size for the source and target sequences, the source and target sequences, and the mapping of the new codes to old codes.
+    """
+    # Flatten the lists of lists
+    source_flat = [item for sublist in source_sequences for item in sublist]
+    target_flat = [item for sublist in target_sequences for item in sublist]
+    
+    # Create sets of unique elements
+    unique_source = set(source_flat)
+    unique_target = set(target_flat)
+
+    len_unique_source = len(unique_source)
+    len_unique_target = len(unique_target)
+    max_unique_source = max(unique_source)
+    max_unique_target = max(unique_target)
+    
+    data_properties = {}
+
+    embedding_size_source, mapping_source = get_embedding_size(max_unique_source, len_unique_source, unique_source, multiplier)
+    embedding_size_target, mapping_target = get_embedding_size(max_unique_target, len_unique_target, unique_target, multiplier)
+
+    if mapping_source is not None:
+        source_sequences = [[mapping_source[code] for code in sequence] for sequence in source_sequences]
+        mapping_source = {v: k for k, v in mapping_source.items()}
+    if mapping_target is not None:
+        target_sequences = [[mapping_target[code] for code in sequence] for sequence in target_sequences]
+        mapping_target = {v: k for k, v in mapping_target.items()}
+
+    data_properties['embedding_size_source'] = embedding_size_source
+    data_properties['embedding_size_target'] = embedding_size_target
+    data_properties['source_sequences'] = source_sequences
+    data_properties['target_sequences'] = target_sequences
+    data_properties['new_to_old_ids_source'] = mapping_source
+    data_properties['new_to_old_ids_target'] = mapping_target
+    
+    return data_properties
+
+def get_embedding_size(max_unique : int, len_unique : int, unique_data : set, multiplier :int) -> Tuple[int, Optional[Dict[int, int]]]:
+    """
+    Get the optimal embedding size for the given data.
+
+    Args:
+        max_unique (int): The maximum unique element in the data.
+        len_unique (int): The number of unique elements in the data.
+        unique_data (set): The set of unique elements in the data.
+        multiplier (int): The multiplier to use for the embedding size.
+    Returns:
+        Tuple[int, Optional[Dict[int, int]]]: A tuple containing the optimal embedding size and a mapping of the old to new codes if the data needs to be reformatted.
+    """
+    if max_unique - multiplier > len_unique:
+        print('must reformat, too much memory would be lost in embedding')
+        # create a new mapping of the codes to the new codes
+        old_ids_to_new_mapping = {code: i for i, code in enumerate(unique_data)}
+        return (len(old_ids_to_new_mapping) // multiplier + 1) * multiplier, old_ids_to_new_mapping
+    else:
+        # create the embedding size that is rounded to the nearest multiple of 64 of the max unique
+        return (max_unique // multiplier + 1) * multiplier, None

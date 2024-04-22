@@ -1,9 +1,13 @@
 import os 
 import pickle
-from typing import Dict, Tuple, List
+import random
+import torch
+import numpy as np
+from typing import Dict, Tuple, List, Optional
 
 
-def load_data(path: str = 'outputData/originalData/' , updated_ids_to_types : bool = False, train : bool = False) -> Tuple[List[List[List[int]]], Dict[str, int], Dict[str, int], Dict[int, str]]:
+def load_data(path: str = 'outputData/originalData/' , updated_ids_to_types : bool = False,
+               train : bool = False, processed_data : bool = False) -> Tuple[List[List[List[int]]], Dict[str, int], Dict[str, int], Dict[int, str]]:
         """
         Load data from the specified file.
 
@@ -17,8 +21,6 @@ def load_data(path: str = 'outputData/originalData/' , updated_ids_to_types : bo
             - The third element is a dictionary mapping event codes to their corresponding types.
             - The fourth element is a dictionary mapping event codes to their corresponding types (reversed mapping).
         """
-        # load the data again
-
         if train:
 
             source_target_sequences = pickle.load(open(os.path.join(path, 'data.source_target_sequences'), 'rb'))
@@ -26,15 +28,35 @@ def load_data(path: str = 'outputData/originalData/' , updated_ids_to_types : bo
             tokens_to_ids_map = pickle.load(open(os.path.join(path, 'data.tokens_to_ids_map'), 'rb'))
             ids_to_tokens_map = pickle.load(open(os.path.join(path, 'data.ids_to_tokens_map'), 'rb'))
 
-            if updated_ids_to_types is not None:
+            if updated_ids_to_types:
                 updated_ids_to_types =  pickle.load(open(os.path.join(path, 'data.updated_ids_to_types'), 'rb'))
                 reverse_up_ids_to_types =  pickle.load(open(os.path.join(path, 'data.reverse_up_ids_to_types'), 'rb'))
                 return source_target_sequences, ids_to_types_map, tokens_to_ids_map, ids_to_tokens_map, updated_ids_to_types, reverse_up_ids_to_types
             
             return source_target_sequences, ids_to_types_map, tokens_to_ids_map, ids_to_tokens_map
         
-        else:
+        if processed_data:
 
+            source_sequences = pickle.load(open(os.path.join(path, 'data.source_sequences'), 'rb'))
+
+            target_sequences = pickle.load(open(os.path.join(path, 'data.target_sequences'), 'rb'))
+
+            try:
+                new_to_old_ids_source = pickle.load(open(os.path.join(path, 'data.new_to_old_ids_source'), 'rb'))
+            except Exception as e:
+                print(f"new_to_old_ids_source file not availble, mapping is the same as the old on")
+                new_to_old_ids_source = None
+
+            try:
+                new_to_old_ids_target = pickle.load(open(os.path.join(path, 'data.new_to_old_ids_target'), 'rb'))
+            except Exception as e:
+                print(f"new_to_old_ids_target file not availble, mapping is the same as the old one")
+                new_to_old_ids_target = None
+
+            return source_sequences, target_sequences, new_to_old_ids_source, new_to_old_ids_target
+
+        else:
+        
             patients_visits_sequences = pickle.load(open(os.path.join(path, 'data.patients_visits_sequences'), 'rb'))
             tokens_to_ids_map = pickle.load(open(os.path.join(path, 'data.tokens_to_ids_map'), 'rb')) 
             code_types = pickle.load(open(os.path.join(path, 'data.code_types'), 'rb'))
@@ -42,7 +64,7 @@ def load_data(path: str = 'outputData/originalData/' , updated_ids_to_types : bo
             return patients_visits_sequences, tokens_to_ids_map, code_types
         
 def get_paths(config: dict, strategy : str = None, predict_procedure : bool = False, predict_drugs : bool = False,
-               train : bool = False) -> dict:
+               train : bool = False, processed_data = False) -> dict:
     """
     creates relevant paths according the given parameters
 
@@ -76,8 +98,9 @@ def get_paths(config: dict, strategy : str = None, predict_procedure : bool = Fa
         if predict_procedure and not(predict_drugs):
             paths['train_data_path'] = os.path.join(output_file, strategy, output_files['diagnosis_procedure_output_file'])
         else:
-            print(train)
             paths['train_data_path'] = os.path.join(output_file, strategy, output_files['diagnosis_output_file'])
+        if processed_data:
+            paths['processed_data_path'] = os.path.join(paths['train_data_path'], 'processed_data/')
         return paths
         
     for mimic_file, path in config['mimic_files'].items():
@@ -96,27 +119,73 @@ def store_files(source_target_sequences : List[Tuple[List[int], List[int]]] = No
                 updated_ids_to_types : Dict[int, int] = None,
                 patients_visits_sequences = None, types = None,
                 code_to_description_map = None, train = False,
-                output_file : str = 'outputData/originalData/'):
+                processed_data = False,
+                new_to_old_ids_source = None,
+                new_to_old_ids_target = None,
+                source_sequences = None,
+                target_sequences = None,
+                output_file : str = 'outputData/originalData/',
+                **kw):
     """
     I can't remember what this function does :p 
     """
     if not os.path.exists(output_file):
         os.makedirs(output_file)
+
     print(f"dumping in {os.path.join(output_file)}")
 
-    
     if train:
         if updated_ids_to_types is not None:
             pickle.dump(updated_ids_to_types, open(os.path.join(output_file, 'data.updated_ids_to_types'), 'wb'), -1)
             reverse_up_ids_to_types = {v: k for k, v in updated_ids_to_types.items()}
             pickle.dump(reverse_up_ids_to_types, open(os.path.join(output_file, 'data.reverse_up_ids_to_types'), 'wb'), -1)  
-
-        pickle.dump(source_target_sequences, open(os.path.join(output_file, 'data.source_target_sequences'), 'wb'), -1)
-        pickle.dump(ids_to_types_map, open(os.path.join(output_file, 'data.ids_to_types_map'), 'wb'), -1)
-        pickle.dump(tokens_to_ids_map, open(os.path.join(output_file, 'data.tokens_to_ids_map'), 'wb'), -1)
-        pickle.dump(ids_to_tokens_map, open(os.path.join(output_file, 'data.ids_to_tokens_map'), 'wb'), -1)
+        if source_target_sequences is not None:
+            pickle.dump(source_target_sequences, open(os.path.join(output_file, 'data.source_target_sequences'), 'wb'), -1)
+        if ids_to_types_map is not None:
+            pickle.dump(ids_to_types_map, open(os.path.join(output_file, 'data.ids_to_types_map'), 'wb'), -1)
+        if tokens_to_ids_map is not None:
+            pickle.dump(tokens_to_ids_map, open(os.path.join(output_file, 'data.tokens_to_ids_map'), 'wb'), -1)
+        if ids_to_tokens_map is not None:
+            pickle.dump(ids_to_tokens_map, open(os.path.join(output_file, 'data.ids_to_tokens_map'), 'wb'), -1)
+        return
+    if processed_data:
+        if source_sequences is not None:
+            pickle.dump(source_sequences, open(output_file + 'data.source_sequences', 'wb'), -1)
+        if target_sequences is not None:
+            pickle.dump(target_sequences, open(output_file + 'data.target_sequences', 'wb'), -1)
+        if new_to_old_ids_source is not None:
+            pickle.dump(new_to_old_ids_source, open(output_file + 'data.new_to_old_ids_source', 'wb'), -1)
+        if new_to_old_ids_target is not None:
+            pickle.dump(new_to_old_ids_target, open(output_file + 'data.new_to_old_ids_target', 'wb'), -1)
         return
     else:
-        pickle.dump(patients_visits_sequences, open(output_file + 'data.patients_visits_sequences', 'wb'), -1)
-        pickle.dump(tokens_to_ids_map, open(output_file + 'data.tokens_to_ids_map', 'wb'), -1)
-        pickle.dump(code_to_description_map, open(output_file + 'data.code_to_description_map', 'wb'), -1)
+        if patients_visits_sequences is not None:
+            pickle.dump(patients_visits_sequences, open(output_file + 'data.patients_visits_sequences', 'wb'), -1)
+        if tokens_to_ids_map is not None:
+            pickle.dump(tokens_to_ids_map, open(output_file + 'data.tokens_to_ids_map', 'wb'), -1)
+        if code_to_description_map is not None:
+            pickle.dump(code_to_description_map, open(output_file + 'data.code_to_description_map', 'wb'), -1)
+
+
+def enforce_reproducibility(use_seed :Optional[int] = None) -> int:
+    """
+    enforce reproducibility by setting the seed for all random number generators
+    Args:
+        use_seed (int): the seed to use, if None, a random seed is generated
+    Returns:
+        seed (int): the seed used
+    """
+    seed = use_seed if use_seed is not None else random.randint(1, 1000000)
+    print(f"Using seed: {seed}")
+
+    random.seed(seed)    # python RNG
+    np.random.seed(seed) # numpy RNG
+
+    # pytorch RNGs
+    torch.manual_seed(seed)          # cpu + cuda
+    torch.cuda.manual_seed_all(seed) # multi-gpu - can be called without gpus
+    if use_seed: # slower speed! https://pytorch.org/docs/stable/notes/randomness.html#cuda-convolution-benchmarking
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark     = False
+
+    return seed
