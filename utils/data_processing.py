@@ -267,9 +267,9 @@ def train_test_val_split(source_sequences : List[List[int]], target_sequences : 
     valid_idx = idx[nTest:nTest+nValid]
     train_idx = idx[nTest+nValid:]
 
-    train = (source_sequences[train_idx], target_sequences[train_idx])
-    test = (source_sequences[test_idx], target_sequences[test_idx])
-    valid = (source_sequences[valid_idx], target_sequences[valid_idx]) 
+    train = {'source_sequences': source_sequences[train_idx], 'target_sequences' : target_sequences[train_idx]}
+    test = {'source_sequences': source_sequences[test_idx],  'target_sequences' : target_sequences[test_idx]}
+    valid = {'source_sequences':  source_sequences[valid_idx], 'target_sequences' : target_sequences[valid_idx]}
     
     return (train, test, valid)
 
