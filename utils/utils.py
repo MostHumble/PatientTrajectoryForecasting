@@ -5,7 +5,6 @@ import torch
 import numpy as np
 from typing import Dict, Tuple, List, Optional
 
-
 def load_data(path: str = 'outputData/originalData/' , updated_ids_to_types : bool = False,
                train : bool = False, processed_data : bool = False) -> Tuple[List[List[List[int]]], Dict[str, int], Dict[str, int], Dict[int, str]]:
         """
@@ -166,26 +165,3 @@ def store_files(source_target_sequences : List[Tuple[List[int], List[int]]] = No
         if code_to_description_map is not None:
             pickle.dump(code_to_description_map, open(output_file + 'data.code_to_description_map', 'wb'), -1)
 
-
-def enforce_reproducibility(use_seed :Optional[int] = None) -> int:
-    """
-    enforce reproducibility by setting the seed for all random number generators
-    Args:
-        use_seed (int): the seed to use, if None, a random seed is generated
-    Returns:
-        seed (int): the seed used
-    """
-    seed = use_seed if use_seed is not None else random.randint(1, 1000000)
-    print(f"Using seed: {seed}")
-
-    random.seed(seed)    # python RNG
-    np.random.seed(seed) # numpy RNG
-
-    # pytorch RNGs
-    torch.manual_seed(seed)          # cpu + cuda
-    torch.cuda.manual_seed_all(seed) # multi-gpu - can be called without gpus
-    if use_seed: # slower speed! https://pytorch.org/docs/stable/notes/randomness.html#cuda-convolution-benchmarking
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark     = False
-
-    return seed
