@@ -1,12 +1,15 @@
-from torch import triu as torch_triu, ones as torch_ones, bool as torch_bool, zeros as torch_zeros
+import torch
 from tqdm import tqdm
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 from typing import Optional, List, Dict, Union, Tuple
 import random
+from dataclasses import asdict
 from utils.utils import get_paths, load_data
+from model import Seq2SeqTransformer
 import numpy as np
 import yaml
+import os
 
 def train_test_val_split(source_sequences : List[List[int]], target_sequences : List[List[int]],
                 test_size : float = 0.05, valid_size : float = 0.05, random_state = None)\
@@ -183,45 +186,84 @@ class patientTrajectoryForcastingDataset(Dataset):
         return self.source_sequences[idx], self.target_sequences[idx]
 
 
-def generate_square_subsequent_mask(sz, DEVICE = 'cuda:0'):
-    mask = (torch_triu(torch_ones((sz, sz), device = DEVICE)) == 1).transpose(0, 1)
+def generate_square_subsequent_mask(sz, DEVICE='cuda:0'):
+    """
+    Generates a square subsequent mask for self-attention mechanism.
+
+    Args:
+        sz (int): The size of the mask.
+        DEVICE (str, optional): The device to be used for computation. Defaults to 'cuda:0'.
+
+    Returns:
+        torch.Tensor: The square subsequent mask.
+
+    """
+    mask = (torch.triu(torch.ones((sz, sz), device=DEVICE)) == 1).transpose(0, 1)
     mask = mask.float().masked_fill(mask == 0, float('-inf')).masked_fill(mask == 1, float(0.0))
     return mask
 
 
-def create_mask(src, tgt, source_pad_id = 0, target_pad_id = 0, DEVICE = 'cuda:0'):
+def create_mask(src, tgt, source_pad_id = 0, target_pad_id = 0, DEVICE='cuda:0'):
+    """
+    Create masks for the source and target sequences.
+
+    Args:
+        src (torch.Tensor): The source sequence tensor.
+        tgt (torch.Tensor): The target sequence tensor.
+        source_pad_id (int, optional): The padding value for the source sequence. Defaults to 0.
+        target_pad_id (int, optional): The padding value for the target sequence. Defaults to 0.
+        DEVICE (str, optional): The device to be used for computation. Defaults to 'cuda:0'.
+
+    Returns:
+        torch.Tensor: The source mask tensor.
+        torch.Tensor: The target mask tensor.
+        torch.Tensor: The source padding mask tensor.
+        torch.Tensor: The target padding mask tensor.
+    """
+
     src_seq_len = src.shape[1]
     tgt_seq_len = tgt.shape[1]
-    
+    #print(f'src_seq_len: {src_seq_len}, tgt_seq_len: {tgt_seq_len}')
     tgt_mask = generate_square_subsequent_mask(tgt_seq_len)
-    src_mask = torch_zeros((src_seq_len, src_seq_len), device = DEVICE).type(torch_bool)
-
-    src_padding_mask = (src == source_pad_id)
+    src_mask = torch.zeros((src_seq_len, src_seq_len), device=DEVICE)
+    source_padding_mask = (src == source_pad_id)
     tgt_padding_mask = (tgt == target_pad_id)
-    return src_mask, tgt_mask, src_padding_mask, tgt_padding_mask
+    return src_mask, tgt_mask, source_padding_mask, tgt_padding_mask
 
 
-def train_epoch(model, optimizer, train_dataloader, loss_fn, DEVICE = 'cuda:0'):
+def train_epoch(model, optimizer, train_dataloader, loss_fn, source_pad_id = 0, target_pad_id = 0, DEVICE='cuda:0'):
+    """
+    Trains the model for one epoch.
+
+    Args:
+        model (nn.Module): The model to be trained.
+        optimizer (torch.optim.Optimizer): The optimizer used for training.
+        train_dataloader (DataLoader): The dataloader for training data.
+        loss_fn (nn.Module): The loss function used for training.
+        source_pad_id (int): The padding token ID for the source input.
+        target_pad_id (int): The padding token ID for the target input.
+        DEVICE (str, optional): The device to be used for training. Defaults to 'cuda:0'.
+
+    Returns:
+        float: The average loss for the epoch.
+    """
     model.train()
     losses = 0
 
     for source_input_ids, target_input_ids in tqdm(train_dataloader, desc='train'):
         
         source_input_ids = source_input_ids.to(DEVICE)
-
         target_input_ids = target_input_ids.to(DEVICE)
-
         target_input_ids_ = target_input_ids[:, :-1]
 
-        source_mask , target_mask, source_padding_mask, target_padding_mask = create_mask(source_input_ids, target_input_ids_, source_pad_id, target_pad_id)
-            
-        logits = model(source_input_ids, target_input_ids_, source_mask, target_mask,source_padding_mask, target_padding_mask, source_padding_mask)
+        source_mask, target_mask, source_padding_mask, target_padding_mask = create_mask(source_input_ids, target_input_ids_, source_pad_id, target_pad_id, DEVICE)
+
+        logits = model(source_input_ids, target_input_ids_, source_mask, target_mask, source_padding_mask, target_padding_mask, source_padding_mask)
     
         optimizer.zero_grad()
         _target_input_ids = target_input_ids[:, 1:]
         loss = loss_fn(logits.reshape(-1, logits.shape[-1]), _target_input_ids.reshape(-1))
         loss.backward()
-
         optimizer.step()
         losses += loss.item()
 
@@ -229,20 +271,32 @@ def train_epoch(model, optimizer, train_dataloader, loss_fn, DEVICE = 'cuda:0'):
 
 #remember to fix the ids_to_types_map if need to eval based on types of codes (not needed now because only predict diagnosis)
 
-def evaluate(model, val_dataloader, loss_fn, DEVICE = 'cuda:0'):
+def evaluate(model, val_dataloader, loss_fn, DEVICE='cuda:0'):
+    """
+    Evaluate the model on the validation dataset.
+
+    Args:
+        model (torch.nn.Module): The model to be evaluated.
+        val_dataloader (torch.utils.data.DataLoader): The validation dataloader.
+        loss_fn (torch.nn.Module): The loss function used for evaluation.
+        DEVICE (str, optional): The device to be used for evaluation. Defaults to 'cuda:0'.
+
+    Returns:
+        float: The average loss over the validation dataset.
+    """
     model.eval()
     losses = 0
 
-    for source_input_ids, target_input_ids in tqdm(val_dataloader,desc='evaluation'):
+    for source_input_ids, target_input_ids in tqdm(val_dataloader, desc='evaluation'):
         
         source_input_ids = source_input_ids.to(DEVICE)
         target_input_ids = target_input_ids.to(DEVICE)
         
         target_input_ids_ = target_input_ids[:, :-1]        
 
-        source_mask , target_mask, source_padding_mask, target_padding_mask = create_mask(source_input_ids, target_input_ids_)
+        source_mask, target_mask, source_padding_mask, target_padding_mask = create_mask(source_input_ids, target_input_ids_)
         
-        logits = model(source_input_ids, target_input_ids_, source_mask, target_mask,source_padding_mask, target_padding_mask, source_padding_mask)
+        logits = model(source_input_ids, target_input_ids_, source_mask, target_mask, source_padding_mask, target_padding_mask, source_padding_mask)
 
         _target_input_ids = target_input_ids[:, 1:]
         
@@ -250,6 +304,7 @@ def evaluate(model, val_dataloader, loss_fn, DEVICE = 'cuda:0'):
         losses += loss.item()
 
     return losses / len(list(val_dataloader))
+
 
 def get_data_loaders(train_batch_size = 128, eval_batch_size = 32, num_workers = 5,
                       seed = 0, test_size = 0.05, valid_size = 0.05, strategy = None, predict_procedure = None,\
@@ -287,3 +342,94 @@ def get_data_loaders(train_batch_size = 128, eval_batch_size = 32, num_workers =
     test_dataloader = DataLoader(test_set, batch_size = eval_batch_size, shuffle = False,  num_workers = num_workers)
 
     return train_dataloader, val_dataloader, test_dataloader, source_tokens_to_ids, target_tokens_to_ids_map, ids_to_types_map, data_and_properties
+
+
+def save_checkpoint(epoch, model, optimizer, val_loss=float('inf'), force=False, prefix:str='', run_num=0, threshold=0.01, checkpoint_patience=8):
+    """
+    Saves a checkpoint of the model during training if the validation loss improves.
+
+    Args:
+        epoch (int): The current epoch number.
+        model: The model to be saved.
+        optimizer: The optimizer used for training.
+        val_loss (float, optional): The current validation loss. Defaults to float('inf').
+        force (bool, optional): If True, forces the checkpoint to be saved regardless of the validation loss. Defaults to False.
+        prefix (str, optional): A prefix to be added to the checkpoint filename. Defaults to ''.
+        run_num (int, optional): The run number of the checkpoint. Defaults to 0.
+        threshold (float, optional): The threshold value for improvement in validation loss. Defaults to 0.01.
+        checkpoint_patience (int, optional): The number of epochs to wait for improvement in validation loss before stopping training. Defaults to 8.
+
+    Returns:
+        bool: False if the checkpoint is not saved, True otherwise.
+    """
+    model_checkpoint_dir = 'model_checkpoints'
+    os.makedirs(model_checkpoint_dir, exist_ok=True)
+
+    global best_val_loss, current_patience
+    if force or (val_loss < (best_val_loss - threshold)):
+        best_val_loss = val_loss
+        current_patience = 0  # Reset patience counter
+        checkpoint = {
+            'epoch': epoch,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'best_val_loss': best_val_loss
+        }
+        model_checkpoint_path = os.path.join(model_checkpoint_dir, f'{prefix}_best_checkpoint_run_{run_num}.pt')
+        torch.save(checkpoint, model_checkpoint_path)
+        print(f"Checkpoint saved at {model_checkpoint_path}")
+    else:
+        current_patience += 1
+
+        if current_patience >= checkpoint_patience:
+            print(f"Validation loss hasn't improved for {current_patience} epochs. Stopping training.")
+    return False
+
+
+def load_checkpoint(run = 0, model_checkpoint_dir='/kaggle/working/model_checkpoints',config_dir='/kaggle/working/configs', return_optimizer_state:bool = False, prefix:str = ''):
+    
+    with open(f'{config_dir}/{prefix}_model_config_run_{run}.yaml', 'r') as yaml_file:
+        loaded_model_params = yaml.safe_load(yaml_file)
+
+    # Create a new instance of the model with the loaded configuration
+    loaded_transformer = Seq2SeqTransformer(
+        loaded_model_params["num_encoder_layers"],
+        loaded_model_params["num_decoder_layers"],
+        loaded_model_params["emb_size"],
+        loaded_model_params["nhead"],
+        loaded_model_params["source_vocab_size"],
+        loaded_model_params["target_vocab_size"],
+        loaded_model_params["ffn_hid_dim"]
+    )
+    print(loaded_model_params)
+    if torch.cuda.is_available():
+        checkpoint = torch.load(f'{model_checkpoint_dir}/{prefix}_best_checkpoint_run_{run}.pt')
+    else:
+        checkpoint = torch.load(f'{model_checkpoint_dir}/{prefix}_best_checkpoint_run_{run}.pt',map_location=torch.device('cpu'))
+    
+        # Remove the "module." prefix from parameter names caused by trained with ddp
+    new_state_dict = {}
+    for key, value in checkpoint['model_state_dict'].items():
+        if key.startswith('module.'):
+            new_key = key[7:]  # Remove the "module." prefix
+            new_state_dict[new_key] = value
+        else:
+            new_state_dict[key] = value
+            
+    epoch = checkpoint['epoch']
+    loss = checkpoint['best_val_loss']
+    loaded_transformer.load_state_dict(new_state_dict)
+    if return_optimizer_state:
+        return  loaded_transformer, checkpoint['optimizer_state_dict'], epoch, loss
+    return loaded_transformer, None, epoch, loss
+
+
+def save_config(config, run_num= 0,prefix:str =''):
+    config_checkpoint_dir = 'configs'
+    os.makedirs(config_checkpoint_dir, exist_ok=True)
+    # Create a dictionary to store the parameters
+    model_params = asdict(config)
+
+    # Save the parameters to a YAML file (e.g., 'model_config.yaml')
+    with open(f'{config_checkpoint_dir}/{prefix}_model_config_run_{run_num}.yaml', 'w') as yaml_file:
+        yaml.dump(model_params, yaml_file)

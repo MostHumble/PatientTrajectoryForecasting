@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 @dataclass
-class config:
+class Config:
     seed : int = None
     strategy = 'SDP'
     predict_procedure : bool = False
