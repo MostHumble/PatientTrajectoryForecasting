@@ -1,10 +1,10 @@
 # Place the mimic-iv & ccs folders in the root folder or edit the line below
 
 # Define root folder
-root_path: /home/USER  # Change this!! Root folder for the project
+root_path: /home/sifal.klioui  # Change this!! Root folder for the project
 
 # Define output directory
-output_path: outputData  # Output directory for processed data
+output_path: PatientTrajectoryForecasting/outputData/  # Output directory for processed data
 
 
 # Paths for MIMIC-IV data
