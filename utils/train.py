@@ -202,7 +202,6 @@ def generate_square_subsequent_mask(sz, DEVICE='cuda:0'):
     mask = mask.float().masked_fill(mask == 0, float('-inf')).masked_fill(mask == 1, float(0.0))
     return mask
 
-
 def create_mask(src, tgt, source_pad_id = 0, target_pad_id = 0, DEVICE='cuda:0'):
     """
     Create masks for the source and target sequences.
@@ -257,21 +256,20 @@ def train_epoch(model, optimizer, train_dataloader, loss_fn, source_pad_id = 0, 
         target_input_ids_ = target_input_ids[:, :-1]
 
         source_mask, target_mask, source_padding_mask, target_padding_mask = create_mask(source_input_ids, target_input_ids_, source_pad_id, target_pad_id, DEVICE)
-
         logits = model(source_input_ids, target_input_ids_, source_mask, target_mask, source_padding_mask, target_padding_mask, source_padding_mask)
     
-        optimizer.zero_grad()
         _target_input_ids = target_input_ids[:, 1:]
         loss = loss_fn(logits.reshape(-1, logits.shape[-1]), _target_input_ids.reshape(-1))
         loss.backward()
         optimizer.step()
+        optimizer.zero_grad()
         losses += loss.item()
 
-    return losses / len(list(train_dataloader))
+    return losses / len(train_dataloader)
 
 #remember to fix the ids_to_types_map if need to eval based on types of codes (not needed now because only predict diagnosis)
 
-def evaluate(model, val_dataloader, loss_fn, DEVICE='cuda:0'):
+def evaluate(model, val_dataloader, loss_fn,  source_pad_id = 0, target_pad_id = 0, DEVICE='cuda:0'):
     """
     Evaluate the model on the validation dataset.
 
@@ -285,32 +283,35 @@ def evaluate(model, val_dataloader, loss_fn, DEVICE='cuda:0'):
         float: The average loss over the validation dataset.
     """
     model.eval()
+
     losses = 0
 
-    for source_input_ids, target_input_ids in tqdm(val_dataloader, desc='evaluation'):
+    with torch.no_grad():
         
-        source_input_ids = source_input_ids.to(DEVICE)
-        target_input_ids = target_input_ids.to(DEVICE)
-        
-        target_input_ids_ = target_input_ids[:, :-1]        
+        for source_input_ids, target_input_ids in tqdm(val_dataloader, desc='evaluation'):
+            
+            source_input_ids = source_input_ids.to(DEVICE)
+            target_input_ids = target_input_ids.to(DEVICE)
+            
+            target_input_ids_ = target_input_ids[:, :-1]        
 
-        source_mask, target_mask, source_padding_mask, target_padding_mask = create_mask(source_input_ids, target_input_ids_)
-        
-        logits = model(source_input_ids, target_input_ids_, source_mask, target_mask, source_padding_mask, target_padding_mask, source_padding_mask)
+            source_mask, target_mask, source_padding_mask, target_padding_mask = create_mask(source_input_ids, target_input_ids_, source_pad_id, target_pad_id, DEVICE)
 
-        _target_input_ids = target_input_ids[:, 1:]
-        
-        loss = loss_fn(logits.reshape(-1, logits.shape[-1]), _target_input_ids.reshape(-1))
-        losses += loss.item()
+            logits = model(source_input_ids, target_input_ids_, source_mask, target_mask, source_padding_mask, target_padding_mask, source_padding_mask)
 
-    return losses / len(list(val_dataloader))
+            _target_input_ids = target_input_ids[:, 1:]
+            
+            loss = loss_fn(logits.reshape(-1, logits.shape[-1]), _target_input_ids.reshape(-1))
+            losses += loss.item()
+
+    return losses / len(val_dataloader)
 
 
-def get_data_loaders(train_batch_size = 128, eval_batch_size = 32, num_workers = 5,
-                      seed = 0, test_size = 0.05, valid_size = 0.05, strategy = None, predict_procedure = None,\
-                      predict_drugs = None, **kw):
+def get_data_loaders(train_batch_size = 128, eval_batch_size = 128, num_workers = 5,pin_memory = True,
+                      seed = 89957, test_size = 0.05, valid_size = 0.05, strategy = None, predict_procedure = None,\
+                      predict_drugs = None,  **kw):
     
-    with open('paths.yaml', 'r') as file:
+    with open('PatientTrajectoryForecasting/paths.yaml', 'r') as file:
         path_config = yaml.safe_load(file)
 
     train_data_path = get_paths(path_config, strategy, predict_procedure, predict_drugs, train = True, processed_data = True)
@@ -337,14 +338,15 @@ def get_data_loaders(train_batch_size = 128, eval_batch_size = 32, num_workers =
     test_set  = patientTrajectoryForcastingDataset(**test)
     val_set  = patientTrajectoryForcastingDataset(**val)
 
-    train_dataloader = DataLoader(train_set, batch_size = train_batch_size, shuffle = True,  num_workers = num_workers)
-    val_dataloader = DataLoader(val_set, batch_size = eval_batch_size, shuffle = False,  num_workers = num_workers)
-    test_dataloader = DataLoader(test_set, batch_size = eval_batch_size, shuffle = False,  num_workers = num_workers)
+    train_dataloader = DataLoader(train_set, batch_size = train_batch_size, shuffle = True,  num_workers = num_workers, pin_memory = pin_memory)
+    val_dataloader = DataLoader(val_set, batch_size = eval_batch_size, shuffle = False,  num_workers = num_workers, pin_memory = pin_memory)
+    test_dataloader = DataLoader(test_set, batch_size = eval_batch_size, shuffle = False,  num_workers = num_workers, pin_memory = pin_memory)
 
     return train_dataloader, val_dataloader, test_dataloader, source_tokens_to_ids, target_tokens_to_ids_map, ids_to_types_map, data_and_properties
 
 
-def save_checkpoint(epoch, model, optimizer, val_loss=float('inf'), force=False, prefix:str='', run_num=0, threshold=0.01, checkpoint_patience=8):
+def save_checkpoint(epoch, model, optimizer, val_loss = float('inf'), force = False, prefix:str = '', run_num = 0,
+                     threshold = 0.01, checkpoint_patience = 8, current_patience = 0, best_val_loss = float('inf')):
     """
     Saves a checkpoint of the model during training if the validation loss improves.
 
@@ -365,7 +367,6 @@ def save_checkpoint(epoch, model, optimizer, val_loss=float('inf'), force=False,
     model_checkpoint_dir = 'model_checkpoints'
     os.makedirs(model_checkpoint_dir, exist_ok=True)
 
-    global best_val_loss, current_patience
     if force or (val_loss < (best_val_loss - threshold)):
         best_val_loss = val_loss
         current_patience = 0  # Reset patience counter
