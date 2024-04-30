@@ -202,6 +202,42 @@ def generate_square_subsequent_mask(sz, DEVICE='cuda:0'):
     mask = mask.float().masked_fill(mask == 0, float('-inf')).masked_fill(mask == 1, float(0.0))
     return mask
 
+def create_source_mask(src, source_pad_id = 0, DEVICE='cuda:0'):
+    """
+    Create a mask for the source sequence.
+
+    Args:
+        src (torch.Tensor): The source sequence tensor.
+        source_pad_id (int, optional): The padding value for the source sequence. Defaults to 0.
+        DEVICE (str, optional): The device to be used for computation. Defaults to 'cuda:0'.
+
+    Returns:
+        torch.Tensor: The source mask tensor.
+    """
+
+    src_seq_len = src.shape[1]
+    src_mask = torch.zeros((src_seq_len, src_seq_len), device=DEVICE)
+    source_padding_mask = (src == source_pad_id)
+    return src_mask, source_padding_mask
+
+def create_target_mask(tgt, target_pad_id = 0, DEVICE='cuda:0'):
+    """
+    Create a mask for the target sequence.
+
+    Args:
+        tgt (torch.Tensor): The target sequence tensor.
+        target_pad_id (int, optional): The padding value for the target sequence. Defaults to 0.
+        DEVICE (str, optional): The device to be used for computation. Defaults to 'cuda:0'.
+
+    Returns:
+        torch.Tensor: The target mask tensor.
+    """
+
+    tgt_seq_len = tgt.shape[1]
+    tgt_mask = generate_square_subsequent_mask(tgt_seq_len, DEVICE)
+    tgt_padding_mask = (tgt == target_pad_id)
+    return tgt_mask, tgt_padding_mask
+
 def create_mask(src, tgt, source_pad_id = 0, target_pad_id = 0, DEVICE='cuda:0'):
     """
     Create masks for the source and target sequences.
@@ -220,14 +256,10 @@ def create_mask(src, tgt, source_pad_id = 0, target_pad_id = 0, DEVICE='cuda:0')
         torch.Tensor: The target padding mask tensor.
     """
 
-    src_seq_len = src.shape[1]
-    tgt_seq_len = tgt.shape[1]
-    #print(f'src_seq_len: {src_seq_len}, tgt_seq_len: {tgt_seq_len}')
-    tgt_mask = generate_square_subsequent_mask(tgt_seq_len)
-    src_mask = torch.zeros((src_seq_len, src_seq_len), device=DEVICE)
-    source_padding_mask = (src == source_pad_id)
-    tgt_padding_mask = (tgt == target_pad_id)
-    return src_mask, tgt_mask, source_padding_mask, tgt_padding_mask
+    src_mask, source_padding_mask = create_source_mask(src, source_pad_id, DEVICE)
+    tgt_mask, target_padding_mask = create_target_mask(tgt, target_pad_id, DEVICE)
+
+    return src_mask, tgt_mask, source_padding_mask, target_padding_mask
 
 
 def train_epoch(model, optimizer, train_dataloader, loss_fn, source_pad_id = 0, target_pad_id = 0, DEVICE='cuda:0'):
@@ -307,9 +339,29 @@ def evaluate(model, val_dataloader, loss_fn,  source_pad_id = 0, target_pad_id =
     return losses / len(val_dataloader)
 
 
-def get_data_loaders(train_batch_size = 128, eval_batch_size = 128, num_workers = 5,pin_memory = True,
-                      seed = 89957, test_size = 0.05, valid_size = 0.05, strategy = None, predict_procedure = None,\
-                      predict_drugs = None,  **kw):
+def get_data_loaders(train_batch_size=128, eval_batch_size=128, num_workers=5, pin_memory=True,
+                     seed=89957, test_size=0.05, valid_size=0.05, strategy=None, predict_procedure=None,
+                     predict_drugs=None, **kw):
+    """
+    Get data loaders for training, validation, and testing.
+
+    Args:
+        train_batch_size (int): Batch size for training data. Default is 128.
+        eval_batch_size (int): Batch size for evaluation data. Default is 128.
+        num_workers (int): Number of worker processes for data loading. Default is 5.
+        pin_memory (bool): If True, the data loader will pin memory for faster data transfer to GPU. Default is True.
+        seed (int): Random seed for data splitting. Default is 89957.
+        test_size (float): Fraction of the data to be used for testing. Default is 0.05.
+        valid_size (float): Fraction of the data to be used for validation. Default is 0.05.
+        strategy (str): Strategy for data loading. Default is None.
+        predict_procedure (str): Procedure for prediction. Default is None.
+        predict_drugs (str): Drugs for prediction. Default is None.
+        **kw: Additional keyword arguments.
+
+    Returns:
+        tuple: A tuple containing the train data loader, validation data loader, test data loader,
+               source tokens to IDs map, target tokens to IDs map, IDs to types map, and data properties.
+    """
     
     with open('PatientTrajectoryForecasting/paths.yaml', 'r') as file:
         path_config = yaml.safe_load(file)
