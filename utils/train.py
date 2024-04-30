@@ -286,7 +286,7 @@ def evaluate(model, val_dataloader, loss_fn,  source_pad_id = 0, target_pad_id =
 
     losses = 0
 
-    with torch.no_grad():
+    with torch.inference_mode():
         
         for source_input_ids, target_input_ids in tqdm(val_dataloader, desc='evaluation'):
             
