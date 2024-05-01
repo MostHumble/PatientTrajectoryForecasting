@@ -8,6 +8,7 @@ import wandb
 import argparse
 import os
 from model import Seq2SeqTransformer
+from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 
 
 #train_batch_size = 128, eval_batch_size = 128, num_workers = 5,pin_memory = True
@@ -29,23 +30,21 @@ class DataConfig:
 
 @dataclass
 class Config:
-    num_encoder_layers: int = 12
-    num_decoder_layers: int = 10
+    num_encoder_layers: int = 8
+    num_decoder_layers: int = 6
     nhead: int = 8
-    emb_size: int = 768
+    emb_size: int = 1024
     ffn_hid_dim: int = 1024
-    train_batch_size: int = 4
+    train_batch_size: int = 1
     eval_batch_size: int = 16
     learning_rate: float = 0.0001
     warmup_start: float = 5
     num_train_epochs: int = 45
     warmup_epochs: int = None
     label_smoothing : float = 0.05
-    scheduler : str = 'CosineAnnealingWarmRestarts'
+    scheduler : str = 'ReduceLROnPlateau'
     factor : float = 0.1
     patience : int = 5
-    T_0 : int = 10
-    T_mult : int = 2
 
     
 
@@ -56,16 +55,11 @@ def train_transformer(config,data_config, train_dataloader, val_dataloader):
     transformer = Seq2SeqTransformer(config.num_encoder_layers, config.num_decoder_layers, config.emb_size,
                                  config.nhead, data_config.source_vocab_size,
                                  data_config.target_vocab_size, config.ffn_hid_dim)
-    
-    print(f'number of params: {sum(p.numel() for p in transformer.parameters())}')
-
     for p in transformer.parameters():
         if p.dim() > 1:
             nn.init.xavier_uniform_(p)
 
-    if torch.cuda.device_count() > 1:
-        print("Let's use", torch.cuda.device_count(), "GPUs!")
-        transformer = nn.DataParallel(transformer)
+    torch.cuda.set_device(DEVICE)
 
     transformer = transformer.to(DEVICE)
 
