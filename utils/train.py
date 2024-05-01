@@ -185,8 +185,25 @@ class patientTrajectoryForcastingDataset(Dataset):
         
         return self.source_sequences[idx], self.target_sequences[idx]
 
+def create_source_mask(src, source_pad_id = 0, DEVICE='cuda:0'):
+    """
+    Create a mask for the source sequence.
 
-def generate_square_subsequent_mask(sz, DEVICE='cuda:0'):
+    Args:
+        src (torch.Tensor): The source sequence tensor.
+        source_pad_id (int, optional): The padding value for the source sequence. Defaults to 0.
+        DEVICE (str, optional): The device to be used for computation. Defaults to 'cuda:0'.
+
+    Returns:
+        torch.Tensor: The source mask tensor, and the source padding mask.
+    """
+
+    src_seq_len = src.shape[1]
+    src_mask = torch.zeros((src_seq_len, src_seq_len), device=DEVICE)
+    source_padding_mask = (src == source_pad_id)
+    return src_mask, source_padding_mask
+
+def generate_square_subsequent_mask(tgt_seq_len, DEVICE='cuda:0'):
     """
     Generates a square subsequent mask for self-attention mechanism.
 
@@ -198,27 +215,10 @@ def generate_square_subsequent_mask(sz, DEVICE='cuda:0'):
         torch.Tensor: The square subsequent mask.
 
     """
-    mask = (torch.triu(torch.ones((sz, sz), device=DEVICE)) == 1).transpose(0, 1)
+    mask = (torch.triu(torch.ones((tgt_seq_len, tgt_seq_len), device=DEVICE)) == 1).transpose(0, 1)
     mask = mask.float().masked_fill(mask == 0, float('-inf')).masked_fill(mask == 1, float(0.0))
     return mask
 
-def create_source_mask(src, source_pad_id = 0, DEVICE='cuda:0'):
-    """
-    Create a mask for the source sequence.
-
-    Args:
-        src (torch.Tensor): The source sequence tensor.
-        source_pad_id (int, optional): The padding value for the source sequence. Defaults to 0.
-        DEVICE (str, optional): The device to be used for computation. Defaults to 'cuda:0'.
-
-    Returns:
-        torch.Tensor: The source mask tensor.
-    """
-
-    src_seq_len = src.shape[1]
-    src_mask = torch.zeros((src_seq_len, src_seq_len), device=DEVICE)
-    source_padding_mask = (src == source_pad_id)
-    return src_mask, source_padding_mask
 
 def create_target_mask(tgt, target_pad_id = 0, DEVICE='cuda:0'):
     """
