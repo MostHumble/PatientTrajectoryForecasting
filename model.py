@@ -52,15 +52,15 @@ class Seq2SeqTransformer(nn.Module):
 
     def encode(self, src: Tensor, src_mask: Tensor):
         return self.transformer.encoder(
-                            self.src_tok_emb(src), src_mask)
+                            self.src_tok_emb(src),  mask=src_mask)
 
     def decode(self, tgt: Tensor, memory: Tensor, tgt_mask: Tensor):
         return self.transformer.decoder(
-                          self.tgt_tok_emb(tgt), memory,
-                          tgt_mask)
+                          self.tgt_tok_emb(tgt), memory = memory,
+                          tgt_mask = tgt_mask)
     
     # We need to add source padding mask to avoid attending to source padding tokens
     def batch_encode(self, src: Tensor, src_mask: Tensor, src_key_padding_mask: Tensor):
         return self.transformer.encoder(
-                            self.src_tok_emb(src), src_mask, src_key_padding_mask)
+                            self.src_tok_emb(src),  mask=src_mask, src_key_padding_mask=src_key_padding_mask)
     # No need for batch_decode as we're generating one token at a time
