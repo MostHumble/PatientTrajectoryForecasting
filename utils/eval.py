@@ -2,6 +2,7 @@ import torch
 from tqdm import tqdm
 from utils.train import create_source_mask, generate_square_subsequent_mask
 from typing import List
+from numpy import mean as np_mean
 
 def get_k(sequence: List[int], k: int, spec_target_ids: torch.Tensor) -> List[int]:
     """
@@ -56,7 +57,7 @@ def mapk(relevant: List[List[int]], forecasted: List[List[int]], k :int = 10):
     Returns:
         float: The mean average precision at k.
     """
-    return torch.mean([apk(r, f, k = k) for r, f in zip(relevant, forecasted)])
+    return np_mean([apk(r, f, k = k) for r, f in zip(relevant, forecasted)])
     
 def evaluate(model, val_dataloader,  source_pad_id = 0, DEVICE='cuda:0', tgt_tokens_to_ids = None, max_len = 100):
     """
@@ -103,4 +104,4 @@ def evaluate(model, val_dataloader,  source_pad_id = 0, DEVICE='cuda:0', tgt_tok
                 else:
                     pred_trg = torch.cat((pred_trg, pred_tokens.unsqueeze(1)), dim=1)
                 
-    # todo: test this function, implement mapk, and recall@k
+    return pred_trgs, targets
