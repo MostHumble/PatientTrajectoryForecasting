@@ -1,7 +1,63 @@
 import torch
 from tqdm import tqdm
 from utils.train import create_source_mask, generate_square_subsequent_mask
+from typing import List
 
+def get_k(sequence: List[int], k: int, spec_target_ids: torch.Tensor) -> List[int]:
+    """
+    Returns the first `k` elements from the `sequence` list that are not present in `spec_target_ids`.
+
+    Args:
+        sequence (List[int]): The input sequence of integers.
+        k (int): The number of elements to return.
+        spec_target_ids (torch.Tensor): The tensor containing the specific target IDs.
+
+    Returns:
+        List[int]: The first `k` elements from `sequence` that are not present in `spec_target_ids`.
+    """
+    return torch.tensor(sequence)[~torch.isin(torch.tensor(sequence), spec_target_ids)][:k].tolist()
+
+def apk(relevant: List[int], forecasted: List[int], spec_target_ids: torch.Tensor = torch.tensor([0, 1, 2, 3, 4, 5]), k: int = 10) -> float:
+    """
+    Calculates the Average Precision at K (AP@K) metric for evaluating the performance of a forecasting model.
+
+    Args:
+        relevant (List[int]): The list of relevant items.
+        forecasted (List[int]): The list of forecasted items.
+        spec_target_ids (torch.Tensor, optional): The specific target IDs to consider. Defaults to torch.tensor([0, 1, 2, 3, 4, 5]).
+        k (int, optional): The value of K for calculating AP@K. Defaults to 10.
+
+    Returns:
+        float: The Average Precision at K (AP@K) score.
+
+    """
+    forecasted = get_k(forecasted, k, spec_target_ids)
+    relevant = get_k(relevant, k, spec_target_ids)
+    sum_precision = 0.0
+    num_hits = 0.0
+
+    for i, forecast in enumerate(forecasted):
+        if forecast in relevant and forecast not in forecasted[:i]:
+            num_hits += 1.0
+            precision_at_i = num_hits / (i + 1.0)
+            sum_precision += precision_at_i
+
+    return sum_precision / (num_hits + 1e-10)
+
+def mapk(relevant: List[List[int]], forecasted: List[List[int]], k :int = 10):
+    """
+    Calculates the mean average precision at k (MAP@k) for a list of relevant and forecasted items.
+
+    Args:
+        relevant (List[List[int]]): A list of lists containing the relevant items for each query.
+        forecasted (List[List[int]]): A list of lists containing the forecasted items for each query.
+        k (int, optional): The value of k for calculating MAP@k. Defaults to 10.
+
+    Returns:
+        float: The mean average precision at k.
+    """
+    return torch.mean([apk(r, f, k = k) for r, f in zip(relevant, forecasted)])
+    
 def evaluate(model, val_dataloader,  source_pad_id = 0, DEVICE='cuda:0', tgt_tokens_to_ids = None, max_len = 100):
     """
     Evaluate the model on the validation dataset.
