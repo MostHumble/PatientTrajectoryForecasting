@@ -80,7 +80,6 @@ def get_sequences(model, dataloader : torch.utils.data.dataloader.DataLoader,  s
 
     with torch.inference_mode():
         for source_input_ids, target_input_ids in tqdm(dataloader, desc='scoring'):
-            print(source_input_ids.shape)
             source_input_ids, target_input_ids = source_input_ids.to(DEVICE),target_input_ids.to(DEVICE)
             src_mask, source_padding_mask = create_source_mask(source_input_ids, source_pad_id, DEVICE) 
             memory = model.batch_encode(source_input_ids, src_mask, source_padding_mask)
