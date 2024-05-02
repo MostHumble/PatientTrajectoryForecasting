@@ -20,7 +20,7 @@ def evaluate(model, val_dataloader,  source_pad_id = 0, DEVICE='cuda:0', tgt_tok
     targets = []
 
     with torch.inference_mode():
-        for source_input_ids, target_input_ids in tqdm(enumerate(val_dataloader), desc='scoring'):
+        for source_input_ids, target_input_ids in tqdm(val_dataloader, desc='scoring'):
             print(source_input_ids.shape)
             source_input_ids, target_input_ids = source_input_ids.to(DEVICE),target_input_ids.to(DEVICE)
             src_mask, source_padding_mask = create_source_mask(source_input_ids, source_pad_id, DEVICE) 
