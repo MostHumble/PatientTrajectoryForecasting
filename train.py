@@ -9,6 +9,9 @@ import argparse
 import os
 from model import Seq2SeqTransformer
 from utils.eval import mapk, get_sequences
+import warnings
+# currently getting warnings because of mask datatypes, you might wanna change this not installing from environment.yml
+warnings.filterwarnings("ignore") 
 
 #train_batch_size = 128, eval_batch_size = 128, num_workers = 5,pin_memory = True
 
@@ -16,7 +19,7 @@ from utils.eval import mapk, get_sequences
 class DataConfig:
     strategy : str = 'SDP'
     seed : int = 89957
-    test_size : float = 0.10
+    test_size : float = 0.05
     valid_size : float = 0.10
     predict_procedure : bool = None
     predict_drugs : bool = None
@@ -29,19 +32,19 @@ class DataConfig:
 
 @dataclass
 class Config:
-    num_encoder_layers: int = 6
-    num_decoder_layers: int = 6
+    num_encoder_layers: int = 12
+    num_decoder_layers: int = 8
     nhead: int = 8
-    emb_size: int = 1024
+    emb_size: int = 768
     ffn_hid_dim: int = 1024
-    train_batch_size: int = 64
-    eval_batch_size: int = 128
+    train_batch_size: int = 8
+    eval_batch_size: int = 16
     learning_rate: float = 0.0001
     warmup_start: float = 5
     num_train_epochs: int = 45
     warmup_epochs: int = None
     label_smoothing : float = 0.05
-    scheduler : str = 'StepLR'
+    scheduler : str = 'CosineAnnealingWarmRestarts'
     factor : float = 0.1
     patience : int = 5
     T_0 : int = 10
@@ -85,12 +88,12 @@ def train_transformer(config,data_config, train_dataloader, val_dataloader, ks =
     
     # add wandb loss logging
     for epoch in range(config.num_train_epochs):
-        mapk = {}
+        val_mapk = {}
         train_loss = train_epoch(transformer,  optimizer, train_dataloader, loss_fn, data_config.source_pad_id, data_config.target_pad_id, DEVICE)
         val_loss =  evaluate(transformer, val_dataloader, loss_fn, data_config.source_pad_id, data_config.target_pad_id, DEVICE)
         pred_trgs, targets =  get_sequences(transformer, val_dataloader, data_config.source_pad_id, tgt_tokens_to_ids, max_len = 72, DEVICE = DEVICE)
         if pred_trgs:
-            val_mapk = {f'val_map@{k}': mapk(targets, pred_trgs, k) for k in ks}
+            val_mapk = {f"val_map@{k}": mapk(targets, pred_trgs, k) for k in ks}
             wandb.log({"Epoch": epoch, "train_loss": train_loss,"val_loss":val_loss, "lr" : optimizer.param_groups[0]['lr'], **val_mapk})
         if config.scheduler :
         # Step the scheduler based on its type
