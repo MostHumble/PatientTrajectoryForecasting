@@ -1,7 +1,7 @@
 import torch
 from tqdm import tqdm
 from utils.train import create_source_mask, generate_square_subsequent_mask
-from typing import List
+from typing import List, Dict
 from numpy import mean as np_mean
 
 def get_k(sequence: List[int], k: int, spec_target_ids: torch.Tensor) -> List[int]:
@@ -59,9 +59,9 @@ def mapk(relevant: List[List[int]], forecasted: List[List[int]], k :int = 10):
     """
     return np_mean([apk(r, f, k = k) for r, f in zip(relevant, forecasted)])
     
-def evaluate(model, val_dataloader,  source_pad_id = 0, DEVICE='cuda:0', tgt_tokens_to_ids = None, max_len = 100):
+def get_sequences(model, dataloader : torch.utils.data.dataloader.DataLoader,  source_pad_id : int = 0, tgt_tokens_to_ids : Dict[str, int] =  None, max_len : int = 150,  DEVICE : str ='cuda:0'):
     """
-    Evaluate the model on the validation dataset.
+    return relevant forcasted and sequences made by the model on the dataset.
 
     Args:
         model (torch.nn.Module): The model to be evaluated.
@@ -70,6 +70,8 @@ def evaluate(model, val_dataloader,  source_pad_id = 0, DEVICE='cuda:0', tgt_tok
         DEVICE (str, optional): The device to run the evaluation on. Defaults to 'cuda:0'.
         tgt_tokens_to_ids (dict, optional): A dictionary mapping target tokens to their IDs. Defaults to None.
         max_len (int, optional): The maximum length of the generated target sequence. Defaults to 100.
+    Returns:
+        List[List[int]], List[List[int]]: The list of relevant and forecasted sequences.
     """
 
     model.eval()
@@ -77,7 +79,7 @@ def evaluate(model, val_dataloader,  source_pad_id = 0, DEVICE='cuda:0', tgt_tok
     targets = []
 
     with torch.inference_mode():
-        for source_input_ids, target_input_ids in tqdm(val_dataloader, desc='scoring'):
+        for source_input_ids, target_input_ids in tqdm(dataloader, desc='scoring'):
             print(source_input_ids.shape)
             source_input_ids, target_input_ids = source_input_ids.to(DEVICE),target_input_ids.to(DEVICE)
             src_mask, source_padding_mask = create_source_mask(source_input_ids, source_pad_id, DEVICE) 
@@ -92,7 +94,7 @@ def evaluate(model, val_dataloader,  source_pad_id = 0, DEVICE='cuda:0', tgt_tok
                 eov_mask = pred_tokens == tgt_tokens_to_ids['EOV']
                 if eov_mask.any():
                     # extend with sequences that have reached EOV
-                    pred_trgs.extend(torch.cat((pred_trg[eov_mask].cpu(),torch.tensor(tgt_tokens_to_ids['EOV']).unsqueeze(0).repeat(eov_mask.sum(), 1)),dim = -1).tolist())
+                    pred_trgs.extend(torch.cat((pred_trg[eov_mask],torch.tensor(tgt_tokens_to_ids['EOV'], device = DEVICE).unsqueeze(0).repeat(eov_mask.sum(), 1)),dim = -1).cpu().tolist())
                     targets.extend(target_input_ids[eov_mask].cpu().tolist())
                     # store corresponding target sequences
                     target_input_ids = target_input_ids[~eov_mask]
