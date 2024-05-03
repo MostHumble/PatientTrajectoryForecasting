@@ -36,9 +36,10 @@ class Config:
     num_decoder_layers: int = 8
     nhead: int = 8
     emb_size: int = 768
+    positional_encoding : bool = True
     ffn_hid_dim: int = 1024
     train_batch_size: int = 8
-    eval_batch_size: int = 16
+    eval_batch_size: int = 4
     learning_rate: float = 0.0001
     warmup_start: float = 5
     num_train_epochs: int = 45
@@ -53,14 +54,16 @@ class Config:
     gamma : float = 0.1
 
     
-
-def train_transformer(config,data_config, train_dataloader, val_dataloader, ks = [20,40,60]):
+def train_transformer(config,data_config, train_dataloader, val_dataloader, ks = [20,40,72]):
 
     DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-    transformer = Seq2SeqTransformer(config.num_encoder_layers, config.num_decoder_layers, config.emb_size,
-                                 config.nhead, data_config.source_vocab_size,
-                                 data_config.target_vocab_size, config.ffn_hid_dim)
+    transformer = Seq2SeqTransformer(config.num_encoder_layers, config.num_decoder_layers,
+                                      config.emb_size, config.nhead, 
+                                      data_config.source_vocab_size, data_config.target_vocab_size,
+                                      config.ffn_hid_dim,
+                                      config.dropout,
+                                      config.positional_encoding)
     
     print(f'number of params: {sum(p.numel() for p in transformer.parameters())}')
 
