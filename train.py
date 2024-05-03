@@ -8,7 +8,10 @@ import wandb
 import argparse
 import os
 from model import Seq2SeqTransformer
-
+from utils.eval import mapk, get_sequences
+import warnings
+# currently getting warnings because of mask datatypes, you might wanna change this not installing from environment.yml
+warnings.filterwarnings("ignore") 
 
 #train_batch_size = 128, eval_batch_size = 128, num_workers = 5,pin_memory = True
 
@@ -16,8 +19,8 @@ from model import Seq2SeqTransformer
 class DataConfig:
     strategy : str = 'SDP'
     seed : int = 89957
-    test_size : float = 0.10
-    valid_size : float = 0.05
+    test_size : float = 0.05
+    valid_size : float = 0.10
     predict_procedure : bool = None
     predict_drugs : bool = None
     input_max_length :int = 448
@@ -30,12 +33,13 @@ class DataConfig:
 @dataclass
 class Config:
     num_encoder_layers: int = 12
-    num_decoder_layers: int = 10
+    num_decoder_layers: int = 8
     nhead: int = 8
     emb_size: int = 768
+    positional_encoding : bool = True
     ffn_hid_dim: int = 1024
-    train_batch_size: int = 4
-    eval_batch_size: int = 16
+    train_batch_size: int = 8
+    eval_batch_size: int = 4
     learning_rate: float = 0.0001
     warmup_start: float = 5
     num_train_epochs: int = 45
@@ -46,16 +50,20 @@ class Config:
     patience : int = 5
     T_0 : int = 10
     T_mult : int = 2
+    step_size : int = 10
+    gamma : float = 0.1
 
     
-
-def train_transformer(config,data_config, train_dataloader, val_dataloader):
+def train_transformer(config,data_config, train_dataloader, val_dataloader, ks = [20,40,72]):
 
     DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-    transformer = Seq2SeqTransformer(config.num_encoder_layers, config.num_decoder_layers, config.emb_size,
-                                 config.nhead, data_config.source_vocab_size,
-                                 data_config.target_vocab_size, config.ffn_hid_dim)
+    transformer = Seq2SeqTransformer(config.num_encoder_layers, config.num_decoder_layers,
+                                      config.emb_size, config.nhead, 
+                                      data_config.source_vocab_size, data_config.target_vocab_size,
+                                      config.ffn_hid_dim,
+                                      config.dropout,
+                                      config.positional_encoding)
     
     print(f'number of params: {sum(p.numel() for p in transformer.parameters())}')
 
@@ -80,19 +88,22 @@ def train_transformer(config,data_config, train_dataloader, val_dataloader):
         scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=config.factor, patience=config.patience)
     elif config.scheduler == 'CosineAnnealingWarmRestarts':
         scheduler = lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=config.T_0, T_mult=config.T_mult)
-
+    
     # add wandb loss logging
     for epoch in range(config.num_train_epochs):
+        val_mapk = {}
         train_loss = train_epoch(transformer,  optimizer, train_dataloader, loss_fn, data_config.source_pad_id, data_config.target_pad_id, DEVICE)
         val_loss =  evaluate(transformer, val_dataloader, loss_fn, data_config.source_pad_id, data_config.target_pad_id, DEVICE)
-        wandb.log({"Epoch": epoch, "train_loss": train_loss,"val_loss":val_loss, "lr" : optimizer.param_groups[0]['lr']})
+        pred_trgs, targets =  get_sequences(transformer, val_dataloader, data_config.source_pad_id, tgt_tokens_to_ids, max_len = 72, DEVICE = DEVICE)
+        if pred_trgs:
+            val_mapk = {f"val_map@{k}": mapk(targets, pred_trgs, k) for k in ks}
+            wandb.log({"Epoch": epoch, "train_loss": train_loss,"val_loss":val_loss, "lr" : optimizer.param_groups[0]['lr'], **val_mapk})
         if config.scheduler :
         # Step the scheduler based on its type
             if isinstance(scheduler, lr_scheduler.ReduceLROnPlateau):
                 scheduler.step(val_loss)
             else:
                 scheduler.step()
-
 
 
 if __name__ == '__main__':
