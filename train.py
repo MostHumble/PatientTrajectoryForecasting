@@ -37,9 +37,10 @@ class Config:
     nhead: int = 8
     emb_size: int = 768
     positional_encoding : bool = True
-    ffn_hid_dim: int = 1024
-    train_batch_size: int = 8
-    eval_batch_size: int = 4
+    ffn_hid_dim: int = 2048
+    dropout: float = 0.1
+    train_batch_size: int = 128
+    eval_batch_size: int = 256
     learning_rate: float = 0.0001
     warmup_start: float = 5
     num_train_epochs: int = 45
