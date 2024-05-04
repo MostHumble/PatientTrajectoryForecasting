@@ -150,7 +150,7 @@ if __name__ == '__main__':
       project="PTF_SDP_D"
       )
     try:
-        train_transformer(config, data_config, train_dataloader, val_dataloader)
+        train_transformer(args, data_config, train_dataloader, val_dataloader)
     except Exception as e:
         wandb.log({"error": str(e)})
         raise e
