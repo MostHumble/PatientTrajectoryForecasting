@@ -18,7 +18,7 @@ warnings.filterwarnings("ignore")
 @dataclass
 class DataConfig:
     strategy : str = 'SDP'
-    seed : int = 89957
+    seed : int = 213033
     test_size : float = 0.05
     valid_size : float = 0.10
     predict_procedure : bool = None
@@ -55,18 +55,18 @@ class Config:
     gamma : float = 0.1
 
     
-def train_transformer(config,data_config, train_dataloader, val_dataloader, ks = [20,40,72]):
+def train_transformer(config, data_config, train_dataloader, val_dataloader, ks = [20,40,72], positional_encoding = True, dropout = 0.1):
 
     DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     transformer = Seq2SeqTransformer(config.num_encoder_layers, config.num_decoder_layers,
-                                      config.emb_size, config.nhead, 
+                                      config.dim_per_head * config.nhead, config.nhead, 
                                       data_config.source_vocab_size, data_config.target_vocab_size,
                                       config.ffn_hid_dim,
-                                      config.dropout,
-                                      config.positional_encoding)
+                                      dropout,
+                                      positional_encoding)
     
-    print(f'number of params: {sum(p.numel() for p in transformer.parameters())}')
+    print(f'number of params: {sum(p.numel() for p in transformer.parameters())/1e6 :.2f}M')
 
     for p in transformer.parameters():
         if p.dim() > 1:
@@ -83,9 +83,7 @@ def train_transformer(config,data_config, train_dataloader, val_dataloader, ks =
     optimizer = torch.optim.AdamW(transformer.parameters(), lr=config.learning_rate)
 
     # Select the scheduler based on configuration
-    if config.scheduler == 'StepLR':
-        scheduler = lr_scheduler.StepLR(optimizer, step_size=config.step_size, gamma=config.gamma)
-    elif config.scheduler == 'ReduceLROnPlateau':
+    if config.scheduler == 'ReduceLROnPlateau':
         scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=config.factor, patience=config.patience)
     elif config.scheduler == 'CosineAnnealingWarmRestarts':
         scheduler = lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=config.T_0, T_mult=config.T_mult)
@@ -95,23 +93,52 @@ def train_transformer(config,data_config, train_dataloader, val_dataloader, ks =
         val_mapk = {}
         train_loss = train_epoch(transformer,  optimizer, train_dataloader, loss_fn, data_config.source_pad_id, data_config.target_pad_id, DEVICE)
         val_loss =  evaluate(transformer, val_dataloader, loss_fn, data_config.source_pad_id, data_config.target_pad_id, DEVICE)
-        pred_trgs, targets =  get_sequences(transformer, val_dataloader, data_config.source_pad_id, tgt_tokens_to_ids, max_len = 72, DEVICE = DEVICE)
+        pred_trgs, targets =  get_sequences(transformer, val_dataloader, data_config.source_pad_id, tgt_tokens_to_ids, max_len = 96, DEVICE = DEVICE)
         if pred_trgs:
             val_mapk = {f"val_map@{k}": mapk(targets, pred_trgs, k) for k in ks}
             wandb.log({"Epoch": epoch, "train_loss": train_loss,"val_loss":val_loss, "lr" : optimizer.param_groups[0]['lr'], **val_mapk})
-        if config.scheduler :
-        # Step the scheduler based on its type
-            if isinstance(scheduler, lr_scheduler.ReduceLROnPlateau):
-                scheduler.step(val_loss)
-            else:
-                scheduler.step()
+        if isinstance(scheduler, lr_scheduler.ReduceLROnPlateau):
+            scheduler.step(val_loss)
+        else:
+            scheduler.step()
 
 
 if __name__ == '__main__':
 
+    parser = argparse.ArgumentParser(description='CLI for wandb sweep parameters')
+
+
+    # Fixed value parameters
+    parser.add_argument('--dim_per_head', type=int, default=64, help='Dimension per head')
+
+    # Integer uniform distribution parameters
+    parser.add_argument('--T_0', type=int, help='Initial temperature (min 5, max 20)')
+    parser.add_argument('--T_mult', type=int, help='Temperature multiplier (min 1, max 4)')
+    parser.add_argument('--ffn_hid_dim', type=int, help='Hidden dimension size of feed forward network (min 512, max 4096)')
+    parser.add_argument('--nhead', type=int, help='Number of heads (min 4, max 16)')
+    parser.add_argument('--num_decoder_layers', type=int, help='Number of decoder layers (min 6, max 16)')
+    parser.add_argument('--num_encoder_layers', type=int, help='Number of encoder layers (min 6, max 16)')
+    parser.add_argument('--num_train_epochs', type=int, help='Number of training epochs (min 13, max 100)')
+    parser.add_argument('--patience', type=int, help='Patience for early stopping (min 3, max 10)')
+    parser.add_argument('--warmup_start', type=int, help='Warmup start epoch (min 3, max 10)')
+
+    # Uniform distribution parameters
+    parser.add_argument('--factor', type=float, help='Factor (min 0.05, max 0.2)')
+    parser.add_argument('--label_smoothing', type=float, help='Label smoothing (min 0, max 0.2)')
+    parser.add_argument('--learning_rate', type=float, help='Learning rate (min 5e-05, max 0.008)')
+
+    # Categorical distribution parameters
+    parser.add_argument('--scheduler', type=str, choices=['ReduceLROnPlateau', 'CosineAnnealingWarmRestarts'], help='Type of scheduler')
+
+    # Quantized log uniform distribution parameters (handled as int for simplicity)
+    parser.add_argument('--train_batch_size', type=int, help='Training batch size (min 32, max 64)')
+
+    args = parser.parse_args()
+
     config = Config()
     data_config = DataConfig()
-    train_dataloader, val_dataloader, test_dataloader, src_tokens_to_ids, tgt_tokens_to_ids, _, data_and_properties  = get_data_loaders(**asdict(data_config))
+
+    train_dataloader, val_dataloader, test_dataloader, src_tokens_to_ids, tgt_tokens_to_ids, _, data_and_properties = get_data_loaders(train_batch_size=args.train_batch_size, eval_batch_size=args.train_batch_size*2, pin_memory=True, **asdict(data_config))
     
     data_config.source_vocab_size = data_and_properties['embedding_size_source']
     data_config.target_vocab_size = data_and_properties['embedding_size_target']
@@ -120,9 +147,8 @@ if __name__ == '__main__':
 
     wandb.init(
       # Set the project where this run will be logged
-      project="PTF_SDP_D", 
-      # Track hyperparameters and run metadata
-      config=asdict(config))
+      project="PTF_SDP_D"
+      )
     try:
         train_transformer(config, data_config, train_dataloader, val_dataloader)
     except Exception as e:
