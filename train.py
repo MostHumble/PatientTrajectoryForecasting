@@ -42,14 +42,13 @@ class Config:
     train_batch_size: int = 128
     eval_batch_size: int = 256
     learning_rate: float = 0.0001
-    warmup_start: float = 5
     num_train_epochs: int = 45
     warmup_epochs: int = None
     label_smoothing : float = 0.05
     scheduler : str = 'CosineAnnealingWarmRestarts'
     factor : float = 0.1
     patience : int = 5
-    T_0 : int = 10
+    T_0 : int = 3
     T_mult : int = 2
     step_size : int = 10
     gamma : float = 0.1
@@ -84,9 +83,9 @@ def train_transformer(config, data_config, train_dataloader, val_dataloader, ks 
 
     # Select the scheduler based on configuration
     if config.scheduler == 'ReduceLROnPlateau':
-        scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=config.factor, patience=config.patience)
+        scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, 'min')
     elif config.scheduler == 'CosineAnnealingWarmRestarts':
-        scheduler = lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=config.T_0, T_mult=config.T_mult)
+        scheduler = lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0 = 4, eta_min=1e-6)
     
     # add wandb loss logging
     for epoch in range(config.num_train_epochs):
@@ -112,18 +111,13 @@ if __name__ == '__main__':
     parser.add_argument('--dim_per_head', type=int, default=64, help='Dimension per head')
 
     # Integer uniform distribution parameters
-    parser.add_argument('--T_0', type=int, help='Initial temperature (min 5, max 20)')
-    parser.add_argument('--T_mult', type=int, help='Temperature multiplier (min 1, max 4)')
     parser.add_argument('--ffn_hid_dim', type=int, help='Hidden dimension size of feed forward network (min 512, max 4096)')
     parser.add_argument('--nhead', type=int, help='Number of heads (min 4, max 16)')
     parser.add_argument('--num_decoder_layers', type=int, help='Number of decoder layers (min 6, max 16)')
     parser.add_argument('--num_encoder_layers', type=int, help='Number of encoder layers (min 6, max 16)')
     parser.add_argument('--num_train_epochs', type=int, help='Number of training epochs (min 13, max 100)')
-    parser.add_argument('--patience', type=int, help='Patience for early stopping (min 3, max 10)')
-    parser.add_argument('--warmup_start', type=int, help='Warmup start epoch (min 3, max 10)')
 
     # Uniform distribution parameters
-    parser.add_argument('--factor', type=float, help='Factor (min 0.05, max 0.2)')
     parser.add_argument('--label_smoothing', type=float, help='Label smoothing (min 0, max 0.2)')
     parser.add_argument('--learning_rate', type=float, help='Learning rate (min 5e-05, max 0.008)')
 
