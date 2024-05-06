@@ -339,8 +339,8 @@ def evaluate(model, val_dataloader, loss_fn,  source_pad_id = 0, target_pad_id =
     return losses / len(val_dataloader)
 
 
-def get_data_loaders(train_batch_size=128, eval_batch_size=128, num_workers=5, pin_memory=True,
-                     seed=89957, test_size=0.05, valid_size=0.05, strategy=None, predict_procedure=None,
+def get_data_loaders(train_batch_size=128, eval_batch_size=128, pin_memory=True,
+                     seed=213033, test_size=0.05, valid_size=0.05, strategy=None, predict_procedure=None,
                      predict_drugs=None, **kw):
     """
     Get data loaders for training, validation, and testing.
@@ -348,7 +348,6 @@ def get_data_loaders(train_batch_size=128, eval_batch_size=128, num_workers=5, p
     Args:
         train_batch_size (int): Batch size for training data. Default is 128.
         eval_batch_size (int): Batch size for evaluation data. Default is 128.
-        num_workers (int): Number of worker processes for data loading. Default is 5.
         pin_memory (bool): If True, the data loader will pin memory for faster data transfer to GPU. Default is True.
         seed (int): Random seed for data splitting. Default is 89957.
         test_size (float): Fraction of the data to be used for testing. Default is 0.05.
@@ -390,9 +389,9 @@ def get_data_loaders(train_batch_size=128, eval_batch_size=128, num_workers=5, p
     test_set  = patientTrajectoryForcastingDataset(**test)
     val_set  = patientTrajectoryForcastingDataset(**val)
 
-    train_dataloader = DataLoader(train_set, batch_size = train_batch_size, shuffle = True,  num_workers = num_workers, pin_memory = pin_memory)
-    val_dataloader = DataLoader(val_set, batch_size = eval_batch_size, shuffle = False,  num_workers = num_workers, pin_memory = pin_memory)
-    test_dataloader = DataLoader(test_set, batch_size = eval_batch_size, shuffle = False,  num_workers = num_workers, pin_memory = pin_memory)
+    train_dataloader = DataLoader(train_set, batch_size = train_batch_size, shuffle = True, pin_memory = pin_memory)
+    val_dataloader = DataLoader(val_set, batch_size = eval_batch_size, shuffle = False, pin_memory = pin_memory)
+    test_dataloader = DataLoader(test_set, batch_size = eval_batch_size, shuffle = False, pin_memory = pin_memory)
 
     return train_dataloader, val_dataloader, test_dataloader, source_tokens_to_ids, target_tokens_to_ids_map, ids_to_types_map, data_and_properties
 
