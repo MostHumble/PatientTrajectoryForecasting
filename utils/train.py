@@ -78,18 +78,24 @@ def get_optimal_embedding_size(source_sequences : List[List[int]], target_sequen
     len_unique_target = len(unique_target)
     max_unique_source = max(unique_source)
     max_unique_target = max(unique_target)
+
+    print(f'Number of unique source codes: {len_unique_source}, max source code: {max_unique_source}')
+    print(f'Number of unique target codes: {len_unique_target}, max target code: {max_unique_target}')
     
-    data_and_properties = {}
 
     embedding_size_source, mapping_source = get_embedding_size(max_unique_source, len_unique_source, unique_source, multiplier)
     embedding_size_target, mapping_target = get_embedding_size(max_unique_target, len_unique_target, unique_target, multiplier)
+    
+    data_and_properties = {'old_to_new_ids_source' : None, 'old_to_new_ids_target' : None}
 
     if mapping_source is not None:
+        print('reformating source data')
         source_sequences = [[mapping_source[code] for code in sequence] for sequence in source_sequences]
         data_and_properties['old_to_new_ids_source'] = mapping_source
         #mapping_source = {v: k for k, v in mapping_source.items()}
 
     if mapping_target is not None:
+        print('reformatting target data')
         target_sequences = [[mapping_target[code] for code in sequence] for sequence in target_sequences]
         data_and_properties['old_to_new_ids_target'] = mapping_target
         #mapping_target = {v: k for k, v in mapping_target.items()}
@@ -98,8 +104,7 @@ def get_optimal_embedding_size(source_sequences : List[List[int]], target_sequen
     data_and_properties['embedding_size_target'] = embedding_size_target
     data_and_properties['source_sequences'] = source_sequences
     data_and_properties['target_sequences'] = target_sequences
-    data_and_properties['old_to_new_ids_source'] = None
-    data_and_properties['old_to_new_ids_target'] = None
+
     
     return data_and_properties
 

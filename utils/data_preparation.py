@@ -26,7 +26,6 @@ def get_drugs_from_mimic_file(fileName :str, choice : Optional[str] ='ndc') -> T
     drugDescription = {}
     mimicFile = gzip.open(fileName, 'r')  # subject_id,hadm_id,gsn,ndc,drug
     mimicFile.readline()
-    number_of_null_NDC_codes = 0
     try:
         for line in mimicFile:
             tokens = line.decode('utf-8').strip().split(',')
@@ -173,11 +172,12 @@ def display(pidAdmMap,admDxMap,admPxMap,admDrugMap):
     print(f" Total Number of procedure code {countCodes(admPxMap)}")
     print(f" Total Number of drug code {countCodes(admDrugMap)}")
     print(f" Total Number of codes {countCodes(admPxMap) +countCodes(admDxMap)+countCodes(admDrugMap) }")
-    print(f" average Number of procedure code per visit {list_avg_visit(admPxMap)}")
-    print(f" average Number of diagnosis code per visit {list_avg_visit(admDxMap)}")
+    print(f" average Number of procedure code per visit {list_avg_visit(admPxMap):.2f}")
+    print(f" average Number of diagnosis code per visit {list_avg_visit(admDxMap):.2f}")
     print(f" average Number of Drug code per visit {list_avg_visit(admDrugMap)}")
 
-def updateAdmCodeList(subject_idAdmMap: Dict[int, List[int]], admDxMap:  Dict[int, List[str]], admPxMap : Dict[int, List[str]], admDrugMap :  Dict[int, List[str]]) \
+def updateAdmCodeList(subject_idAdmMap: Dict[int, List[int]], admDxMap:  Dict[int, List[str]],
+                       admPxMap : Dict[int, List[str]], admDrugMap :  Dict[int, List[str]]) \
       -> Tuple[Dict[int, List[str]], Dict[int, List[str]], Dict[int, List[str]]]:
     """
     Update the admission code lists for each admission ID (to take into account deleted elements).
@@ -591,7 +591,7 @@ def build_data(subject_idAdmMap : Dict[int, List[int]], adDx: Dict[int, List[int
         date = []
         seq = []
         for visit in visits:
-            joined = list(dict.fromkeys(chain.from_iterable(visit))) # dict.fromkeys used as an ordered set func
+            joined = list(dict.fromkeys(chain.from_iterable(visit))) # dict.fromkeys used as an ordered set function
             seq.append(joined)
         seqs.append(seq)
 
