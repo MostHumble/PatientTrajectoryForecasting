@@ -8,15 +8,17 @@ output_path: PatientTrajectoryForecasting/outputData/  # Output directory for pr
 
 
 # Paths for MIMIC-IV data
-mimic_iv_path: mimic-iv-2.2/hosp  # Path to MIMIC-IV data
+mimic_iv_path: mimic-iv-2.2  # Path to MIMIC-IV data
 ccs_path: CSS  # Path to CCS directory
 
 # MIMIC-IV data files
 mimic_files:
-  admission_file: admissions_sorted_sid_admtime.csv.gz  # Admission data file (sorted by subject_id then admittime in ascending order)
-  diagnosis_file: diagnoses_icd.csv.gz  # Diagnosis data file
-  procedure_file: procedures_icd.csv.gz  # Procedure data file
-  prescription_file: prescriptions.csv.gz  # Prescription data file
+  admission_file: hosp/admissions_sorted_sid_admtime.csv.gz  # Admission data file (sorted by subject_id then admittime in ascending order)
+  diagnosis_file: hosp/diagnoses_icd.csv.gz  # Diagnosis data file
+  procedure_file: hosp/procedures_icd.csv.gz  # Procedure data file
+  prescription_file: hosp/prescriptions.csv.gz  # Prescription data file
+  note_file: note/discharge.csv.gz  # Note data file
+
 
 # CCS files
 css_files:
