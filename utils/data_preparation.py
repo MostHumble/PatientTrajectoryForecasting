@@ -181,14 +181,14 @@ def countCodes(*dicts: Dict[int, List[str]]) -> int:
 def display(pidAdmMap,admDxMap,admPxMap,admDrugMap):
     print(f" Total Number of patients {len(pidAdmMap)}")
     print(f" Total Number of admissions {len(admDxMap)}")
-    print(f" Average number of admissions per patient {list_avg_visit(pidAdmMap)}")
+    print(f" Average number of admissions per patient {list_avg_visit(pidAdmMap):.2f}")
     print(f" Total Number of diagnosis code {countCodes(admDxMap)}")
     print(f" Total Number of procedure code {countCodes(admPxMap)}")
     print(f" Total Number of drug code {countCodes(admDrugMap)}")
     print(f" Total Number of codes {countCodes(admPxMap) +countCodes(admDxMap)+countCodes(admDrugMap) }")
     print(f" average Number of procedure code per visit {list_avg_visit(admPxMap):.2f}")
     print(f" average Number of diagnosis code per visit {list_avg_visit(admDxMap):.2f}")
-    print(f" average Number of Drug code per visit {list_avg_visit(admDrugMap)}")
+    print(f" average Number of Drug code per visit {list_avg_visit(admDrugMap):.2f}")
 
 def updateAdmCodeList(subject_idAdmMap: Dict[int, List[int]], admDxMap:  Dict[int, List[str]],
                        admPxMap : Dict[int, List[str]], admDrugMap :  Dict[int, List[str]]) \
@@ -220,7 +220,7 @@ def updateAdmCodeList(subject_idAdmMap: Dict[int, List[int]], admDxMap:  Dict[in
     return adDx, adPx, adDrug
 
 def clean_data(subject_idAdmMap : Dict[int, List[int]], admDxMap : Dict[int, List[str]],
-                admPxMap : Dict[int, List[str]], admDrugMap : Dict[int, List[str]], min_admissions_threshold : int = 2) \
+                admPxMap : Dict[int, List[str]], admDrugMap : Dict[int, List[str]], min_visits : int = 2) \
       -> Tuple[Dict[int, List[int]], Dict[int, List[str]], Dict[int, List[str]], Dict[int, List[str]]]:
     """
     Cleans the data by removing patient records that do not have all three medical codes for an admission
@@ -257,10 +257,10 @@ def clean_data(subject_idAdmMap : Dict[int, List[int]], admDxMap : Dict[int, Lis
 
     adDx, adPx, adDrug = updateAdmCodeList(subject_idAdmMap, admDxMap, admPxMap, admDrugMap)
 
-    print(f"Removing patients who made less than {min_admissions_threshold} admissions")
+    print(f"Removing patients who made less than {min_visits} admissions")
     subDelList = []
     for pid, admIdList in subject_idAdmMap.items():
-        if len(admIdList) < min_admissions_threshold:
+        if len(admIdList) < min_visits:
             subDelList.append(pid)
             continue
 
@@ -595,6 +595,7 @@ def filter_notes(notes : pd.DataFrame, subject_id_hadm_id_map : Dict[int, List[i
         filtered_subject_id_hadm_id_map (dict): The filtered subject_id_hadm_id_map dictionary.
 
     """
+    print(f'filtering notes where the subject has made less than {min_visits} visits sucessive visits...')
     subject_id_hadm_id_map_ = {}
     filtered_rows = []
     subjects_to_rm = 0
