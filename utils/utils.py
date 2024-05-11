@@ -42,13 +42,13 @@ def load_data(path: str = 'outputData/originalData/' , updated_ids_to_types : bo
 
             try:
                 new_to_old_ids_source = pickle.load(open(os.path.join(path, 'data.new_to_old_ids_source'), 'rb'))
-            except Exception as e:
+            except:
                 print(f"new_to_old_ids_source file not availble, mapping is the same as the old one")
                 new_to_old_ids_source = None
 
             try:
                 new_to_old_ids_target = pickle.load(open(os.path.join(path, 'data.new_to_old_ids_target'), 'rb'))
-            except Exception as e:
+            except:
                 print(f"new_to_old_ids_target file not availble, mapping is the same as the old one")
                 new_to_old_ids_target = None
 
