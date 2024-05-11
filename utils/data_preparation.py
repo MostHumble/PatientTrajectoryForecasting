@@ -465,9 +465,9 @@ def display_code_stats(adDx ,adPx,adDrug):
     print(f" Total Number of all codes {countCodes(adDx,adPx,adDrug) }")
 
 
-    print(f" average Number of procedure code per visit {list_avg_visit(adPx)}")
-    print(f" average Number of diagnosis code per visit {list_avg_visit(adDx)}")
-    print(f" average Number of drug code per visit {list_avg_visit(adDrug)}")
+    print(f" average Number of procedure code per visit {list_avg_visit(adPx):.2f}")
+    print(f" average Number of diagnosis code per visit {list_avg_visit(adDx):.2f}")
+    print(f" average Number of drug code per visit {list_avg_visit(adDrug):.2f}")
 
     print(f" Min. and max. Number of diagnosis code per admission {min_max_codes(adDx)}")
     print(f" Min. and max. Number of procedure code  per admission{min_max_codes(adPx)}")
@@ -546,12 +546,37 @@ def trim(adDx  : Dict[int,List[int]], adPx  : Dict[int,List[int]], adDrug  : Dic
     display_code_stats(adDx, adPx, adDrug)
     return adDx, adPx, adDrug
 
-def build_data(subject_idAdmMap : Dict[int, List[int]], adDx: Dict[int, List[int]], adPx: Dict[int, List[int]], adDrug: Dict[int, List[int]], minVisits: int = 2) -> Tuple[List[List[List[int]]], Dict[str, int]]:
+def filter_subjects(subject_id_adm_map : Dict[int, List[int]], min_visits: int = 2) -> Dict[int, List[int]]:
+    """
+    Filters subjects who've made less that minVisits visits
+
+    Args:
+        subject_id_adm_map (Dict[int, List[int]]): A dictionary mapping subject IDs to a list of admission IDs.
+        min_visits (int, optional): The minimum number of visits required for a patient. Defaults to 2.
+    
+    Returns:
+        Dict[int, List[int]]: A dictionary containing the filtered subject IDs and admission IDs.
+    """
+    subject_id_adm_map_ = {}
+    filtred = 0
+    for subject_id, adm_id_list in subject_id_adm_map.items():
+        if len(adm_id_list) < min_visits:
+            filtred += 1
+            continue
+        subject_id_adm_map_[subject_id] = adm_id_list
+
+    print(f'Number of patients with less than {min_visits} visits: {filtred}')
+    return subject_id_adm_map_
+
+
+def build_data(subject_id_adm_map : Dict[int, List[int]], adDx: Dict[int, List[int]],
+                adPx: Dict[int, List[int]],
+                  adDrug: Dict[int, List[int]]) -> Tuple[List[List[List[int]]], Dict[str, int]]:
     """
     Builds the data for patient trajectory forecasting.
 
     Args:
-        subject_idAdmMap (dict): A dictionary mapping subject IDs to admission IDs.
+        subject_id_adm_map (dict): A dictionary mapping subject IDs to admission IDs.
         adDx (dict): A dictionary mapping admission IDs to diagnosis codes.
         adPx (dict): A dictionary mapping admission IDs to procedure codes.
         adDrug (dict): A dictionary mapping admission IDs to drug codes.
@@ -563,58 +588,39 @@ def build_data(subject_idAdmMap : Dict[int, List[int]], adDx: Dict[int, List[int
     
     adPx, adDx, adDrug = map(lambda d: defaultdict(list, d), (adPx, adDx, adDrug)) # add default [] for missing values
 
-    print(f'Building admission-Visits mapping & filtering patients with less than {minVisits} ')
-    pidSeqMap = {}
+    pid_seq_map = {}
     
-    skipped = 0 
-    for subject_id, admIdList in subject_idAdmMap.items():
-        if len(admIdList) < minVisits: 
-            skipped += 1
-            continue # skip patients with less than minVisits ( default 1 )
-        sortedList = [(adDx[admId], adPx[admId], adDrug[admId]) for admId in admIdList]
-        
-        pidSeqMap[subject_id] = sortedList
-        
-    adPx, adDx, adDrug = map(dict, (adPx, adDx, adDrug))  # remove default [] behavior to not break something
+    for subject_id, adm_id_list in subject_id_adm_map.items():
 
-    print(f'{skipped} subjects were removed')
+        pid_seq_map[subject_id] = [(adDx[adm_id], adPx[adm_id], adDrug[adm_id]) for adm_id in adm_id_list]
+        
     print('Building subject-id, diagnosis, procedure, drugs mapping')
-    subject_ids = []
-    dates = []
+
     seqs = []
-    ages = []
-    for subject_id, visits in pidSeqMap.items():
-        subject_ids.append(subject_id)
-        diagnose = []
-        procedure = []
-        drugs = []
-        date = []
+    for subject_id, visits in pid_seq_map.items():
         seq = []
         for visit in visits:
             joined = list(dict.fromkeys(chain.from_iterable(visit))) # dict.fromkeys used as an ordered set function
+            print(joined)
             seq.append(joined)
         seqs.append(seq)
 
     print('Converting Strings Codes into unique integer, and making types')
     types = {}
-    newSeqs = []
+    new_seqs = []
     for patient in seqs:
-        newPatient = []
-        #print("patient",patient)
+        new_patient = []
         for visit in patient:
-            #print("visit",visit)
-            newVisit = []
+            new_visit = []
             for code in visit:
-                #print("code",code)
                 if code in types:
-                    newVisit.append(types[code])
+                    new_visit.append(types[code])
                 else:
                     types[code] = len(types)
-                    newVisit.append(types[code])
-                    #print("newVisit",newVisit)
-            newPatient.append(newVisit)
-        newSeqs.append(newPatient)
-    return newSeqs, types
+                    new_visit.append(types[code])
+            new_patient.append(new_visit)
+        new_seqs.append(new_patient)
+    return new_seqs, types
 
 def remove_code(currentSeqs : List[List[List[int]]], types, threshold :int = 5) -> Tuple[List[List[List[int]]], Dict[str, int], Dict[int, str]]:
     """
