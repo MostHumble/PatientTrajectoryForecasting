@@ -5,6 +5,7 @@ import pandas as pd
 from itertools import chain
 from collections import defaultdict, Counter
 from typing import Dict, Optional, Tuple, List, Set, Union
+from itertools import takewhile
 
 def get_drugs_from_mimic_file(fileName :str, choice : Optional[str] ='ndc') -> Tuple[Dict[str, str], Dict[int, list]]:
     """
@@ -112,7 +113,18 @@ def get_ICDs_from_mimic_file(fileName: str, isdiagnosis: bool = True) -> Dict[in
     print ('-Number of null ICD10 codes in file ' + fileName + ': ' + str(number_of_null_ICD10_codes))
     return mapping
 
-def load_mimic_data(admission_file : str, diagnosis_file : str, procedure_file : str, prescription_file : str, choice : Optional[str] = 'ndc', **kw) \
+def prepare_note(file_name :str = '../physionet.org/files/mimic-iv-note/2.2/note/discharge.csv.gz' , save_path = '../mimic-iv-2.2/note/discharge.csv.gz'):
+    notes = pd.read_csv(file_name)
+    notes.drop(['note_id','charttime', 'storetime','note_type', 'note_seq'], axis = 1, inplace = True)
+    if len(notes.hadm_id.unique()) == len(notes): # thus can be used as an id
+        print('unique hadm_id can be used as index')
+        notes.set_index('hadm_id', inplace=True)
+    else:
+        raise Exception("filter_notes notes needs this formatting to work, please check what went wrong")
+    notes.to_csv(save_path, index = 'hadm_id', compression = 'gzip')
+    return notes
+
+def load_mimic_data(admission_file : str, diagnosis_file : str, procedure_file : str, prescription_file : str, note_file: str, choice : Optional[str] = 'ndc', **kw) \
     -> Tuple[Dict[int,List[int]], Dict[int,List[int]], Dict[int,List[int]], Dict[int,List[int]], Dict[str, str]]:
     """
     Loads MIMIC data and returns various mappings.
@@ -121,7 +133,7 @@ def load_mimic_data(admission_file : str, diagnosis_file : str, procedure_file :
     - choice (Optional[str]): The choice of drug mapping. Defaults to 'ndc'.
 
     Returns:
-    - subject_idAdmMap (dict): A dictionary mapping subject_id to a list of admission IDs.
+    - subject_id_adm_map (dict): A dictionary mapping subject_id to a list of admission IDs.
     - admDxMap (dict): A dictionary mapping admission IDs to diagnosis codes.
     - admPxMap (dict): A dictionary mapping admission IDs to procedure codes.
     - admDrugMap (dict): A dictionary mapping admission IDs to drug codes.
@@ -129,20 +141,20 @@ def load_mimic_data(admission_file : str, diagnosis_file : str, procedure_file :
     """
     print ('Building subject_id-admission mapping, admission-date mapping')
 
-    subject_idAdmMap = {}
+    subject_id_adm_map = {}
     infd = gzip.open(admission_file, 'r')
     infd.readline()
     for line in infd:
         tokens = line.decode('utf-8').strip().split(',')
         subject_id = int(tokens[0])
         hadm_id = int(tokens[1])
-        if subject_id in subject_idAdmMap: 
-            subject_idAdmMap[subject_id].add(hadm_id)
+        if subject_id in subject_id_adm_map: 
+            subject_id_adm_map[subject_id].add(hadm_id)
         else: 
-            subject_idAdmMap[subject_id] = set()
-            subject_idAdmMap[subject_id].add(hadm_id)
-    for subject_id in subject_idAdmMap.keys():
-        subject_idAdmMap[subject_id] = list(subject_idAdmMap[subject_id])  
+            subject_id_adm_map[subject_id] = set()
+            subject_id_adm_map[subject_id].add(hadm_id)
+    for subject_id in subject_id_adm_map.keys():
+        subject_id_adm_map[subject_id] = list(subject_id_adm_map[subject_id])  
     infd.close()
 
     print ('Building admission-diagnosis mapping')
@@ -153,7 +165,9 @@ def load_mimic_data(admission_file : str, diagnosis_file : str, procedure_file :
 
     print ('Building admission-drug mapping')
     drugDescription, admDrugMap = get_drugs_from_mimic_file(prescription_file, choice)
-    return subject_idAdmMap,admDxMap,admPxMap,admDrugMap,drugDescription
+
+    notes = pd.read_csv(note_file, index_col='hadm_id')
+    return subject_id_adm_map, admDxMap, admPxMap, admDrugMap, drugDescription, notes
 
 def list_avg_visit(dic: Dict[int, List[int]]) -> float:
     a =[len(intList) for k,intList in dic.items()]
@@ -244,10 +258,7 @@ def clean_data(subject_idAdmMap : Dict[int, List[int]], admDxMap : Dict[int, Lis
     adDx, adPx, adDrug = updateAdmCodeList(subject_idAdmMap, admDxMap, admPxMap, admDrugMap)
 
     print(f"Removing patients who made less than {min_admissions_threshold} admissions")
-    pidMap = {}
-    adm = []
     subDelList = []
-    subject_idAdmMap1 = subject_idAdmMap
     for pid, admIdList in subject_idAdmMap.items():
         if len(admIdList) < min_admissions_threshold:
             subDelList.append(pid)
@@ -548,7 +559,7 @@ def trim(adDx  : Dict[int,List[int]], adPx  : Dict[int,List[int]], adDrug  : Dic
 
 def filter_subjects(subject_id_adm_map : Dict[int, List[int]], min_visits: int = 2) -> Dict[int, List[int]]:
     """
-    Filters subjects who've made less that minVisits visits
+    Filters subjects who've made less that min_visits visits
 
     Args:
         subject_id_adm_map (Dict[int, List[int]]): A dictionary mapping subject IDs to a list of admission IDs.
@@ -569,9 +580,45 @@ def filter_subjects(subject_id_adm_map : Dict[int, List[int]], min_visits: int =
     return subject_id_adm_map_
 
 
+def filter_notes(notes : pd.DataFrame, subject_id_hadm_id_map : Dict[int, List[int]],
+                  min_visits: int = 2) -> Tuple[pd.DataFrame, Dict[int, List[int]]]:
+    """
+    Filters the notes dataframe based on the given subject_id_hadm_id_map and minimum number of visits.
+
+    Args:
+        notes (pandas.DataFrame): The dataframe containing the notes.
+        subject_id_hadm_id_map (dict): A dictionary mapping subject IDs to a list of associated HADM IDs.
+        min_visits (int): The minimum number of visits required for a subject to be included.
+
+    Returns:
+        filtered_notes (pandas.DataFrame): The filtered notes dataframe.
+        filtered_subject_id_hadm_id_map (dict): The filtered subject_id_hadm_id_map dictionary.
+
+    """
+    subject_id_hadm_id_map_ = {}
+    filtered_rows = []
+    subjects_to_rm = 0
+    visits_to_rm = 0
+    for subject_id, hadm_ids in subject_id_hadm_id_map.items():
+        temp_df = notes[notes['subject_id'] == subject_id]
+        if set(temp_df.index).issuperset(set(hadm_ids)):
+            temp_df = temp_df.loc[hadm_ids]
+            filtered_rows.extend(temp_df.index.tolist())
+            subject_id_hadm_id_map_[subject_id] = hadm_ids
+        else:
+            temp_hadm_ids = list(takewhile(lambda x: x in set(temp_df.index), hadm_ids))
+            if len(temp_hadm_ids) > min_visits:
+                subject_id_hadm_id_map_[subject_id] = temp_hadm_ids
+            else:
+                subjects_to_rm += 1
+                visits_to_rm += len(hadm_ids)
+            
+    print(f'found {subjects_to_rm} subjects and {visits_to_rm} visits that need to be removed')
+    return notes.loc[filtered_rows], subject_id_hadm_id_map_
+
 def build_data(subject_id_adm_map : Dict[int, List[int]], adDx: Dict[int, List[int]],
                 adPx: Dict[int, List[int]],
-                  adDrug: Dict[int, List[int]]) -> Tuple[List[List[List[int]]], Dict[str, int]]:
+                adDrug: Dict[int, List[int]]) -> Tuple[List[List[List[int]]], Dict[str, int]]:
     """
     Builds the data for patient trajectory forecasting.
 
@@ -595,12 +642,14 @@ def build_data(subject_id_adm_map : Dict[int, List[int]], adDx: Dict[int, List[i
         pid_seq_map[subject_id] = [(adDx[adm_id], adPx[adm_id], adDrug[adm_id]) for adm_id in adm_id_list]
         
     print('Building subject-id, diagnosis, procedure, drugs mapping')
-
     seqs = []
     for subject_id, visits in pid_seq_map.items():
         seq = []
         for visit in visits:
-            joined = list(dict.fromkeys(chain.from_iterable(visit))) # dict.fromkeys used as an ordered set function
+            # chain.from_iterable flattens the list of lists
+            # dict.fromkeys used as an ordered set function
+            # list() used to convert the dict_keys object to a list
+            joined = list(dict.fromkeys(chain.from_iterable(visit)))
             print(joined)
             seq.append(joined)
         seqs.append(seq)
