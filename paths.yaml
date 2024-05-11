@@ -13,7 +13,7 @@ ccs_path: CSS  # Path to CCS directory
 
 # MIMIC-IV data files
 mimic_files:
-  admission_file: admissions.csv.gz  # Admission data file
+  admission_file: admissions_sorted_sid_admtime.csv.gz  # Admission data file (sorted by subject_id then admittime in ascending order)
   diagnosis_file: diagnoses_icd.csv.gz  # Diagnosis data file
   procedure_file: procedures_icd.csv.gz  # Procedure data file
   prescription_file: prescriptions.csv.gz  # Prescription data file
