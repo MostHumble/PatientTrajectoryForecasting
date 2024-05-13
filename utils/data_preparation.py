@@ -124,8 +124,12 @@ def prepare_note(file_name :str = '../physionet.org/files/mimic-iv-note/2.2/note
     notes.to_csv(save_path, index = 'hadm_id', compression = 'gzip')
     return notes
 
-def load_mimic_data(admission_file : str, diagnosis_file : str, procedure_file : str, prescription_file : str, note_file: str, choice : Optional[str] = 'ndc', **kw) \
-    -> Tuple[Dict[int,List[int]], Dict[int,List[int]], Dict[int,List[int]], Dict[int,List[int]], Dict[str, str]]:
+def load_mimic_data(admission_file : str, diagnosis_file : str, procedure_file : str,
+                     prescription_file : str, note_file: str,
+                       choice : Optional[str] = 'ndc', load_notes = True,**kw) \
+    -> Tuple[Dict[int,List[int]], Dict[int,List[int]],
+             Dict[int,List[int]], Dict[int,List[int]], Dict[str, str], Optional[pd.DataFrame]]:
+    
     """
     Loads MIMIC data and returns various mappings.
 
@@ -138,6 +142,8 @@ def load_mimic_data(admission_file : str, diagnosis_file : str, procedure_file :
     - admPxMap (dict): A dictionary mapping admission IDs to procedure codes.
     - admDrugMap (dict): A dictionary mapping admission IDs to drug codes.
     - drugDescription (dict): A dictionary mapping drug codes to drug descriptions.
+    - note_file (str): The path to the note file.
+    - load_notes (bool): Whether to load the notes file.
     """
     print ('Building subject_id-admission mapping, admission-date mapping')
 
@@ -165,9 +171,11 @@ def load_mimic_data(admission_file : str, diagnosis_file : str, procedure_file :
 
     print ('Building admission-drug mapping')
     drugDescription, admDrugMap = get_drugs_from_mimic_file(prescription_file, choice)
-
-    notes = pd.read_csv(note_file, index_col='hadm_id')
-    return subject_id_adm_map, admDxMap, admPxMap, admDrugMap, drugDescription, notes
+    if load_notes:
+        print('loading notes, this may take a while...')
+        notes = pd.read_csv(note_file, index_col='hadm_id')
+        return subject_id_adm_map, admDxMap, admPxMap, admDrugMap, drugDescription, notes
+    return subject_id_adm_map, admDxMap, admPxMap, admDrugMap, drugDescription, None
 
 def list_avg_visit(dic: Dict[int, List[int]]) -> float:
     a =[len(intList) for k,intList in dic.items()]
@@ -238,17 +246,30 @@ def clean_data(subject_idAdmMap : Dict[int, List[int]], admDxMap : Dict[int, Lis
     """
     print("Cleaning data...")
     subDelList = []
-
+    could_saved = 0
+    could_not_saved = 0
+    average_visits_saved = []
     print("Removing patient records who do not have all three medical codes for an admission")
     for subject_id, hadm_ids in subject_idAdmMap.items():
-        for hadm_id in hadm_ids:
+        flag = False
+        for i, hadm_id in enumerate(hadm_ids):
             if hadm_id not in admDxMap.keys():
-                subDelList.append(subject_id)
+                flag = True
             if hadm_id not in admPxMap.keys():
-                subDelList.append(subject_id)
+                flag = True
             if hadm_id not in admDrugMap.keys():
-                subDelList.append(subject_id)
-
+                flag = True
+            if flag:
+                if  i > 1:
+                    could_saved += 1
+                    average_visits_saved.append(i+1)
+                    subject_idAdmMap[subject_id] = hadm_ids[:i]
+                else:
+                    could_not_saved += 1
+                    subDelList.append(subject_id)
+                break
+            
+    # todo: check if this is usefull now
     subDelList = list(set(subDelList))
 
     for subject_id_to_rm in subDelList:
@@ -472,7 +493,6 @@ def display_code_stats(adDx ,adPx,adDrug):
     print(f" Total Number of diagnosis code {countCodes(adDx)}")
     print(f" Total Number of procedure code {countCodes(adPx)}")
     print(f" Total Number of drug code {countCodes(adDrug)}")
-    print(f" Total Number of unique  D,P codes {countCodes(adDx,adPx) }")
     print(f" Total Number of all codes {countCodes(adDx,adPx,adDrug) }")
 
 
