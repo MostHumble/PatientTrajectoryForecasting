@@ -268,7 +268,7 @@ def clean_data(subject_idAdmMap : Dict[int, List[int]], admDxMap : Dict[int, Lis
                     could_not_saved += 1
                     subDelList.append(subject_id)
                 break
-            
+
     # todo: check if this is usefull now
     subDelList = list(set(subDelList))
 
@@ -436,15 +436,18 @@ def map_ICD_to_CCSR(mapping : Dict[int, List[int]]) -> Tuple[Dict[int, List[str]
         for ICD in ICDs_List:
             if ICD.startswith('D10_'):
                 padStr = 'D10_'
+                countICD10 +=1
             elif ICD.startswith('D9_'):
                 padStr = 'D9_'
+                countICD9 +=1
             elif ICD.startswith('P10_'):
                 padStr = 'P10_'    
+                countICD9 += 1
             elif ICD.startswith('P9_'):
                 padStr = 'P9_'  
+                countICD9 += 1
             else:
                 print("Wrong coding format")
-
             try:
 
                 CCS_code = icdTOCCS_Map[ICD]
@@ -475,7 +478,7 @@ def map_ICD_to_CCSR(mapping : Dict[int, List[int]]) -> Tuple[Dict[int, List[str]
 
 
             
-    print(f"total number of ICD9 codes used {countICD9} and ICD10 codes: {countICD10}")  
+    print(f"-Total number of ICD9 codes used {countICD9} and ICD10 codes: {countICD10}")  
     print ('-Total number (complete set) of ICD9+ICD10 codes (diag + proc): ' + str(len(set(icdTOCCS_Map.keys()))))
     print ('-Total number of ICD codes actually used: ' + str(len(set_of_used_codes)))
     print ('-Total number of ICD codes missing in the admissions list: ' , number_of_codes_missing)
