@@ -193,7 +193,7 @@ def countCodes(*dicts: Dict[int, List[str]]) -> int:
     code_counts = Counter(code for sublist in all_values for code in sublist)
     return len(code_counts)
 
-def updateAdmCodeList(subject_idAdmMap: Dict[int, List[int]], admDxMap:  Dict[int, List[str]],
+def update_adm_code_list(subject_idAdmMap: Dict[int, List[int]], admDxMap:  Dict[int, List[str]],
                        admPxMap : Dict[int, List[str]], admDrugMap :  Dict[int, List[str]]) \
       -> Tuple[Dict[int, List[str]], Dict[int, List[str]], Dict[int, List[str]]]:
     """
@@ -269,7 +269,7 @@ def clean_data(subject_id_adm_map : Dict[int, List[int]], adm_dx_map : Dict[int,
         del subject_id_adm_map[subject_id_to_rm]
 
 
-    adm_dx_map, adm_px_map, adm_drug_map = updateAdmCodeList(subject_id_adm_map, adm_dx_map, adm_px_map, adm_drug_map)
+    adm_dx_map, adm_px_map, adm_drug_map = update_adm_code_list(subject_id_adm_map, adm_dx_map, adm_px_map, adm_drug_map)
 
     print(f"Removing patients who made less than {min_visits} admissions")
     subject_del_list = []
@@ -281,7 +281,7 @@ def clean_data(subject_id_adm_map : Dict[int, List[int]], adm_dx_map : Dict[int,
     for i in subject_del_list:
         del subject_id_adm_map[i]
 
-    adm_dx_map, adm_px_map, adm_drug_map = updateAdmCodeList(subject_id_adm_map, adm_dx_map, adm_px_map, adm_drug_map)
+    adm_dx_map, adm_px_map, adm_drug_map = update_adm_code_list(subject_id_adm_map, adm_dx_map, adm_px_map, adm_drug_map)
     display_code_stats(adm_dx_map, adm_px_map, adm_drug_map)
     return subject_id_adm_map, adm_dx_map, adm_px_map, adm_drug_map
 
@@ -526,13 +526,13 @@ def icd_mapping(CCSRDX_file: str, CCSRPCS_file: str, CCSDX_file: str, CCSPX_file
     DxcodeDescription = map_ccsr_description(D_CCSR_Ref_file)
     PxcodeDescription = map_ccsr_description(P_CCSR_Ref_file, cat = 'Proc')
     codeDescription ={**DxcodeDescription ,**PxcodeDescription }
-    codeDescription ={**codeDescription , **convValuestoList(ccsTOdescription_Map), **drugDescription}
+    codeDescription ={**codeDescription, **convValuestoList(ccsTOdescription_Map), **drugDescription}
     # mapping diagnois codes
     print('addmision diagnosis codes...')
-    adDx,missingDxCodes,set_of_used_codes1 = map_ICD_to_CCSR(adDx)
+    adDx, missingDxCodes, set_of_used_codes1 = map_ICD_to_CCSR(adDx)
     # mapping procedure codes
     print('addmision procedure codes...')
-    adPx,missingPxCodes,set_of_used_codes2 = map_ICD_to_CCSR(adPx)
+    adPx, missingPxCodes, set_of_used_codes2 = map_ICD_to_CCSR(adPx)
     codeDescription['SOH'] = 'Start of history'
     codeDescription['EOH'] = 'End of history'
     codeDescription['BOV'] = 'Beginning of visit'
@@ -612,7 +612,7 @@ def filter_notes(notes : pd.DataFrame, subject_id_hadm_id_map : Dict[int, List[i
         filtered_subject_id_hadm_id_map (dict): The filtered subject_id_hadm_id_map dictionary.
 
     """
-    print(f'filtering notes where the subject has made less than {min_visits} visits sucessive visits...')
+    print(f'filtering notes where the subject has made less than {min_visits} sucessive visits...')
     subject_id_hadm_id_map_ = {}
     filtered_rows = []
     subjects_to_rm = 0
@@ -620,13 +620,14 @@ def filter_notes(notes : pd.DataFrame, subject_id_hadm_id_map : Dict[int, List[i
     for subject_id, hadm_ids in subject_id_hadm_id_map.items():
         temp_df = notes[notes['subject_id'] == subject_id]
         if set(temp_df.index).issuperset(set(hadm_ids)):
-            temp_df = temp_df.loc[hadm_ids]
-            filtered_rows.extend(temp_df.index.tolist())
+            filtered_rows.extend(hadm_ids)
             subject_id_hadm_id_map_[subject_id] = hadm_ids
         else:
             temp_hadm_ids = list(takewhile(lambda x: x in set(temp_df.index), hadm_ids))
+
             if len(temp_hadm_ids) > min_visits:
                 subject_id_hadm_id_map_[subject_id] = temp_hadm_ids
+                filtered_rows.extend(temp_hadm_ids)
             else:
                 subjects_to_rm += 1
                 visits_to_rm += len(hadm_ids)
@@ -667,7 +668,6 @@ def build_data(subject_id_adm_map : Dict[int, List[int]], adDx: Dict[int, List[i
             # dict.fromkeys used as an ordered set function
             # list() used to convert the dict_keys object to a list
             joined = list(dict.fromkeys(chain.from_iterable(visit)))
-            print(joined)
             seq.append(joined)
         seqs.append(seq)
 
