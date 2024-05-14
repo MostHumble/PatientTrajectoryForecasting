@@ -2,10 +2,11 @@ import os
 import gzip
 import pickle
 import pandas as pd
-from itertools import chain
 from collections import defaultdict, Counter
-from typing import Dict, Optional, Tuple, List, Set, Union
-from itertools import takewhile
+from typing import Dict, Optional, Tuple, List, Set
+from itertools import takewhile, chain
+import statistics
+
 
 def get_drugs_from_mimic_file(fileName :str, choice : Optional[str] ='ndc') -> Tuple[Dict[str, str], Dict[int, list]]:
     """
@@ -177,28 +178,22 @@ def load_mimic_data(admission_file : str, diagnosis_file : str, procedure_file :
         return subject_id_adm_map, admDxMap, admPxMap, admDrugMap, drugDescription, notes
     return subject_id_adm_map, admDxMap, admPxMap, admDrugMap, drugDescription, None
 
-def list_avg_visit(dic: Dict[int, List[int]]) -> float:
-    a =[len(intList) for k,intList in dic.items()]
-    return sum(a)/len(a)
+def mean_std(dic):
+    codes = [len(codes_adm) for codes_adm in dic.values()]
+    mean = statistics.fmean(codes)
+    std_dev = statistics.stdev(codes)
+    return mean, std_dev
+
+def print_mean_std(dic, name):
+    mean, std_dev = mean_std(dic)
+    print(f"- Average Number of {name} per visit: {mean:.2f} +- {std_dev:.2f}")
 
 def countCodes(*dicts: Dict[int, List[str]]) -> int:
     all_values = [value for dic in dicts for value in dic.values()]
     code_counts = Counter(code for sublist in all_values for code in sublist)
     return len(code_counts)
 
-def display(pidAdmMap,admDxMap,admPxMap,admDrugMap):
-    print(f" Total Number of patients {len(pidAdmMap)}")
-    print(f" Total Number of admissions {len(admDxMap)}")
-    print(f" Average number of admissions per patient {list_avg_visit(pidAdmMap):.2f}")
-    print(f" Total Number of diagnosis code {countCodes(admDxMap)}")
-    print(f" Total Number of procedure code {countCodes(admPxMap)}")
-    print(f" Total Number of drug code {countCodes(admDrugMap)}")
-    print(f" Total Number of codes {countCodes(admPxMap) +countCodes(admDxMap)+countCodes(admDrugMap) }")
-    print(f" average Number of procedure code per visit {list_avg_visit(admPxMap):.2f}")
-    print(f" average Number of diagnosis code per visit {list_avg_visit(admDxMap):.2f}")
-    print(f" average Number of Drug code per visit {list_avg_visit(admDrugMap):.2f}")
-
-def updateAdmCodeList(subject_idAdmMap: Dict[int, List[int]], admDxMap:  Dict[int, List[str]],
+def update_adm_code_list(subject_idAdmMap: Dict[int, List[int]], admDxMap:  Dict[int, List[str]],
                        admPxMap : Dict[int, List[str]], admDrugMap :  Dict[int, List[str]]) \
       -> Tuple[Dict[int, List[str]], Dict[int, List[str]], Dict[int, List[str]]]:
     """
@@ -227,8 +222,8 @@ def updateAdmCodeList(subject_idAdmMap: Dict[int, List[int]], admDxMap:  Dict[in
             
     return adDx, adPx, adDrug
 
-def clean_data(subject_idAdmMap : Dict[int, List[int]], admDxMap : Dict[int, List[str]],
-                admPxMap : Dict[int, List[str]], admDrugMap : Dict[int, List[str]], min_visits : int = 2) \
+def clean_data(subject_id_adm_map : Dict[int, List[int]], adm_dx_map : Dict[int, List[str]],
+                adm_px_map : Dict[int, List[str]], adm_drug_map : Dict[int, List[str]], min_visits : int = 2) \
       -> Tuple[Dict[int, List[int]], Dict[int, List[str]], Dict[int, List[str]], Dict[int, List[str]]]:
     """
     Cleans the data by removing patient records that do not have all three medical codes for an admission
@@ -245,52 +240,50 @@ def clean_data(subject_idAdmMap : Dict[int, List[int]], admDxMap : Dict[int, Lis
         tuple: A tuple containing the updated subject_idAdmMap, adDx, adPx, and adDrug dictionaries.
     """
     print("Cleaning data...")
-    subDelList = []
-    could_saved = 0
+    subject_del_list = []
     could_not_saved = 0
     average_visits_saved = []
     print("Removing patient records who do not have all three medical codes for an admission")
-    for subject_id, hadm_ids in subject_idAdmMap.items():
+    for subject_id, hadm_ids in subject_id_adm_map.items():
         flag = False
         for i, hadm_id in enumerate(hadm_ids):
-            if hadm_id not in admDxMap.keys():
+            if hadm_id not in adm_dx_map.keys():
                 flag = True
-            if hadm_id not in admPxMap.keys():
+            if hadm_id not in adm_px_map.keys():
                 flag = True
-            if hadm_id not in admDrugMap.keys():
+            if hadm_id not in adm_drug_map.keys():
                 flag = True
             if flag:
                 if  i > 1:
-                    could_saved += 1
                     average_visits_saved.append(i+1)
-                    subject_idAdmMap[subject_id] = hadm_ids[:i]
+                    subject_id_adm_map[subject_id] = hadm_ids[:i]
                 else:
                     could_not_saved += 1
-                    subDelList.append(subject_id)
+                    subject_del_list.append(subject_id)
                 break
-            
+
     # todo: check if this is usefull now
-    subDelList = list(set(subDelList))
+    subject_del_list = list(set(subject_del_list))
 
-    for subject_id_to_rm in subDelList:
-        del subject_idAdmMap[subject_id_to_rm]
+    for subject_id_to_rm in subject_del_list:
+        del subject_id_adm_map[subject_id_to_rm]
 
 
-    adDx, adPx, adDrug = updateAdmCodeList(subject_idAdmMap, admDxMap, admPxMap, admDrugMap)
+    adm_dx_map, adm_px_map, adm_drug_map = update_adm_code_list(subject_id_adm_map, adm_dx_map, adm_px_map, adm_drug_map)
 
     print(f"Removing patients who made less than {min_visits} admissions")
-    subDelList = []
-    for pid, admIdList in subject_idAdmMap.items():
+    subject_del_list = []
+    for pid, admIdList in subject_id_adm_map.items():
         if len(admIdList) < min_visits:
-            subDelList.append(pid)
+            subject_del_list.append(pid)
             continue
 
-    for i in subDelList:
-        del subject_idAdmMap[i]
+    for i in subject_del_list:
+        del subject_id_adm_map[i]
 
-    adDx, adPx, adDrug = updateAdmCodeList(subject_idAdmMap, adDx, adPx, adDrug)
-    display(subject_idAdmMap, adDx, adPx, adDrug)
-    return subject_idAdmMap, adDx, adPx, adDrug
+    adm_dx_map, adm_px_map, adm_drug_map = update_adm_code_list(subject_id_adm_map, adm_dx_map, adm_px_map, adm_drug_map)
+    display_code_stats(adm_dx_map, adm_px_map, adm_drug_map)
+    return subject_id_adm_map, adm_dx_map, adm_px_map, adm_drug_map
 
 def create_CCS_CCSR_mapping(CCSRDX_file : str, CCSRPCS_file : str, CCSDX_file : str, CCSPX_file : str, dump : bool = True) -> Dict[str, str]:
     """
@@ -436,15 +429,18 @@ def map_ICD_to_CCSR(mapping : Dict[int, List[int]]) -> Tuple[Dict[int, List[str]
         for ICD in ICDs_List:
             if ICD.startswith('D10_'):
                 padStr = 'D10_'
+                countICD10 +=1
             elif ICD.startswith('D9_'):
                 padStr = 'D9_'
+                countICD9 +=1
             elif ICD.startswith('P10_'):
                 padStr = 'P10_'    
+                countICD9 += 1
             elif ICD.startswith('P9_'):
                 padStr = 'P9_'  
+                countICD9 += 1
             else:
                 print("Wrong coding format")
-
             try:
 
                 CCS_code = icdTOCCS_Map[ICD]
@@ -475,10 +471,10 @@ def map_ICD_to_CCSR(mapping : Dict[int, List[int]]) -> Tuple[Dict[int, List[str]
 
 
             
-    print(f"total number of ICD9 codes used {countICD9} and ICD10 codes: {countICD10}")  
-    print ('-Total number (complete set) of ICD9+ICD10 codes (diag + proc): ' + str(len(set(icdTOCCS_Map.keys()))))
-    print ('-Total number of ICD codes actually used: ' + str(len(set_of_used_codes)))
-    print ('-Total number of ICD codes missing in the admissions list: ' , number_of_codes_missing)
+    print(f"- Total number of ICD9 codes used {countICD9} and ICD10 codes: {countICD10}")  
+    print ('- Total number (complete set) of ICD9+ICD10 codes (diag + proc): ' + str(len(set(icdTOCCS_Map.keys()))))
+    print ('- Total number of ICD codes actually used: ' + str(len(set_of_used_codes)))
+    print ('- Total number of ICD codes missing in the admissions list: ' , number_of_codes_missing)
     
     return CodesToInternalMap,missingCodes,set_of_used_codes
 
@@ -490,19 +486,18 @@ def min_max_codes(dic):
     return min(countCode),max(countCode)
 
 def display_code_stats(adDx ,adPx,adDrug):
-    print(f" Total Number of diagnosis code {countCodes(adDx)}")
-    print(f" Total Number of procedure code {countCodes(adPx)}")
-    print(f" Total Number of drug code {countCodes(adDrug)}")
-    print(f" Total Number of all codes {countCodes(adDx,adPx,adDrug) }")
+    print(f"- Total Number of diagnosis code {countCodes(adDx)}")
+    print(f"- Total Number of procedure code {countCodes(adPx)}")
+    print(f"- Total Number of drug code {countCodes(adDrug)}")
+    print(f"- Total Number of all codes {countCodes(adDx,adPx,adDrug) }")
 
+    print_mean_std(adPx, "procedure codes")
+    print_mean_std(adDx, "diagnosis codes")
+    print_mean_std(adDrug, "Drug codes")
 
-    print(f" average Number of procedure code per visit {list_avg_visit(adPx):.2f}")
-    print(f" average Number of diagnosis code per visit {list_avg_visit(adDx):.2f}")
-    print(f" average Number of drug code per visit {list_avg_visit(adDrug):.2f}")
-
-    print(f" Min. and max. Number of diagnosis code per admission {min_max_codes(adDx)}")
-    print(f" Min. and max. Number of procedure code  per admission{min_max_codes(adPx)}")
-    print(f" Min. and max. Number of drug code  per admission {min_max_codes(adDrug)}")
+    print(f"- Min. and max. Number of diagnosis code per admission {min_max_codes(adDx)}")
+    print(f"- Min. and max. Number of procedure code  per admission{min_max_codes(adPx)}")
+    print(f"- Min. and max. Number of drug code  per admission {min_max_codes(adDrug)}")
 
 def icd_mapping(CCSRDX_file: str, CCSRPCS_file: str, CCSDX_file: str, CCSPX_file: str, D_CCSR_Ref_file: str, P_CCSR_Ref_file: str,\
                  adDx: Dict[int, List[int]], adPx: Dict[int, List[int]], adDrug: Dict[int, List[int]],\
@@ -531,11 +526,13 @@ def icd_mapping(CCSRDX_file: str, CCSRPCS_file: str, CCSDX_file: str, CCSPX_file
     DxcodeDescription = map_ccsr_description(D_CCSR_Ref_file)
     PxcodeDescription = map_ccsr_description(P_CCSR_Ref_file, cat = 'Proc')
     codeDescription ={**DxcodeDescription ,**PxcodeDescription }
-    codeDescription ={**codeDescription , **convValuestoList(ccsTOdescription_Map), **drugDescription}
+    codeDescription ={**codeDescription, **convValuestoList(ccsTOdescription_Map), **drugDescription}
     # mapping diagnois codes
-    adDx,missingDxCodes,set_of_used_codes1 = map_ICD_to_CCSR(adDx)
+    print('addmision diagnosis codes...')
+    adDx, missingDxCodes, set_of_used_codes1 = map_ICD_to_CCSR(adDx)
     # mapping procedure codes
-    adPx,missingPxCodes,set_of_used_codes2 = map_ICD_to_CCSR(adPx)
+    print('addmision procedure codes...')
+    adPx, missingPxCodes, set_of_used_codes2 = map_ICD_to_CCSR(adPx)
     codeDescription['SOH'] = 'Start of history'
     codeDescription['EOH'] = 'End of history'
     codeDescription['BOV'] = 'Beginning of visit'
@@ -615,7 +612,7 @@ def filter_notes(notes : pd.DataFrame, subject_id_hadm_id_map : Dict[int, List[i
         filtered_subject_id_hadm_id_map (dict): The filtered subject_id_hadm_id_map dictionary.
 
     """
-    print(f'filtering notes where the subject has made less than {min_visits} visits sucessive visits...')
+    print(f'filtering notes where the subject has made less than {min_visits} sucessive visits...')
     subject_id_hadm_id_map_ = {}
     filtered_rows = []
     subjects_to_rm = 0
@@ -623,17 +620,17 @@ def filter_notes(notes : pd.DataFrame, subject_id_hadm_id_map : Dict[int, List[i
     for subject_id, hadm_ids in subject_id_hadm_id_map.items():
         temp_df = notes[notes['subject_id'] == subject_id]
         if set(temp_df.index).issuperset(set(hadm_ids)):
-            temp_df = temp_df.loc[hadm_ids]
-            filtered_rows.extend(temp_df.index.tolist())
+            filtered_rows.extend(hadm_ids)
             subject_id_hadm_id_map_[subject_id] = hadm_ids
         else:
             temp_hadm_ids = list(takewhile(lambda x: x in set(temp_df.index), hadm_ids))
+
             if len(temp_hadm_ids) > min_visits:
                 subject_id_hadm_id_map_[subject_id] = temp_hadm_ids
+                filtered_rows.extend(temp_hadm_ids)
             else:
                 subjects_to_rm += 1
                 visits_to_rm += len(hadm_ids)
-            
     print(f'found {subjects_to_rm} subjects and {visits_to_rm} visits that need to be removed')
     return notes.loc[filtered_rows], subject_id_hadm_id_map_
 
@@ -671,7 +668,6 @@ def build_data(subject_id_adm_map : Dict[int, List[int]], adDx: Dict[int, List[i
             # dict.fromkeys used as an ordered set function
             # list() used to convert the dict_keys object to a list
             joined = list(dict.fromkeys(chain.from_iterable(visit)))
-            print(joined)
             seq.append(joined)
         seqs.append(seq)
 
