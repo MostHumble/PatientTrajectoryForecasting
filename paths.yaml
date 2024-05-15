@@ -10,6 +10,7 @@ output_path: PatientTrajectoryForecasting/outputData/  # Output directory for pr
 # Paths for MIMIC-IV data
 mimic_iv_path: mimic-iv-2.2  # Path to MIMIC-IV data
 ccs_path: CSS  # Path to CCS directory
+mimic_iv_notes_path : physionet.org/files/mimic-iv-note/2.2/note/discharge.csv.gz  # Path to MIMIC-IV notes data
 
 # MIMIC-IV data files
 mimic_files:

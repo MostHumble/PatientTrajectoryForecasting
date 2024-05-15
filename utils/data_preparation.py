@@ -6,9 +6,9 @@ from collections import defaultdict, Counter
 from typing import Dict, Optional, Tuple, List, Set
 from itertools import takewhile, chain
 import statistics
+import asyncio
 
-
-def get_drugs_from_mimic_file(fileName :str, choice : Optional[str] ='ndc') -> Tuple[Dict[str, str], Dict[int, list]]:
+def get_drugs_from_mimic_file(fileName :str, choice : str) -> Tuple[Dict[str, str], Dict[int, list]]:
     """
     Extracts drug information from a MIMIC file.
 
@@ -125,27 +125,19 @@ def prepare_note(file_name :str = '../physionet.org/files/mimic-iv-note/2.2/note
     notes.to_csv(save_path, index = 'hadm_id', compression = 'gzip')
     return notes
 
-def load_mimic_data(admission_file : str, diagnosis_file : str, procedure_file : str,
-                     prescription_file : str, note_file: str,
-                       choice : Optional[str] = 'ndc', load_notes = True,**kw) \
-    -> Tuple[Dict[int,List[int]], Dict[int,List[int]],
-             Dict[int,List[int]], Dict[int,List[int]], Dict[str, str], Optional[pd.DataFrame]]:
+async def load_notes(note_file, index_col, load_note):
+    '''
+    Load notes from a csv file
+    '''
+    if load_note:
+        print('loading notes, this may take a while...')
+        notes =  pd.read_csv(note_file, index_col = index_col)
+        print('notes loaded')
+        return notes
+    return None
+
+async def build_subject_id_admissions(admission_file : str):
     
-    """
-    Loads MIMIC data and returns various mappings.
-
-    Args:
-    - choice (Optional[str]): The choice of drug mapping. Defaults to 'ndc'.
-
-    Returns:
-    - subject_id_adm_map (dict): A dictionary mapping subject_id to a list of admission IDs.
-    - admDxMap (dict): A dictionary mapping admission IDs to diagnosis codes.
-    - admPxMap (dict): A dictionary mapping admission IDs to procedure codes.
-    - admDrugMap (dict): A dictionary mapping admission IDs to drug codes.
-    - drugDescription (dict): A dictionary mapping drug codes to drug descriptions.
-    - note_file (str): The path to the note file.
-    - load_notes (bool): Whether to load the notes file.
-    """
     print ('Building subject_id-admission mapping, admission-date mapping')
 
     subject_id_adm_map = {}
@@ -164,20 +156,74 @@ def load_mimic_data(admission_file : str, diagnosis_file : str, procedure_file :
         subject_id_adm_map[subject_id] = list(subject_id_adm_map[subject_id])  
     infd.close()
 
+    print('Done building subject_id-admission mapping')
+    return subject_id_adm_map
+
+
+async def build_admissions_diagnosis(diagnosis_file):
     print ('Building admission-diagnosis mapping')
     admDxMap = get_ICDs_from_mimic_file(diagnosis_file)
+    print('Done building admission-diagnosis mapping')
+    return admDxMap
 
+async def build_admissions_procedure(procedure_file):
     print ('Building admission-procedure mapping')
     admPxMap = get_ICDs_from_mimic_file(procedure_file, isdiagnosis=False)
+    print('Done building admission-procedure mapping')
+    return admPxMap
 
+async def build_admissions_drug(prescription_file, choice):
     print ('Building admission-drug mapping')
     drugDescription, admDrugMap = get_drugs_from_mimic_file(prescription_file, choice)
-    if load_notes:
-        print('loading notes, this may take a while...')
-        notes = pd.read_csv(note_file, index_col='hadm_id')
-        return subject_id_adm_map, admDxMap, admPxMap, admDrugMap, drugDescription, notes
-    return subject_id_adm_map, admDxMap, admPxMap, admDrugMap, drugDescription, None
+    print('Done building admission-drug mapping')
 
+    return drugDescription, admDrugMap
+
+    
+
+
+async def load_mimic_data(admission_file : str, diagnosis_file : str, procedure_file : str,
+                     prescription_file : str, note_file: str,
+                       choice : Optional[str] = 'ndc', load_note = True,  index_col='hadm_id',**kw) \
+    -> Tuple[Dict[int,List[int]], Dict[int,List[int]],
+             Dict[int,List[int]], Dict[int,List[int]], Dict[str, str], Optional[pd.DataFrame]]:
+    
+    """
+    Loads MIMIC data and returns various mappings.
+
+    Args:
+    - choice (Optional[str]): The choice of drug mapping. Defaults to 'ndc'.
+
+    Returns:
+    - subject_id_adm_map (dict): A dictionary mapping subject_id to a list of admission IDs.
+    - admDxMap (dict): A dictionary mapping admission IDs to diagnosis codes.
+    - admPxMap (dict): A dictionary mapping admission IDs to procedure codes.
+    - admDrugMap (dict): A dictionary mapping admission IDs to drug codes.
+    - drugDescription (dict): A dictionary mapping drug codes to drug descriptions.
+    - note_file (str): The path to the note file.
+    - note_file (bool): Whether to load the notes file.
+    """
+
+    subject_id_adm_map_task =  asyncio.create_task(build_subject_id_admissions(admission_file))
+
+    admDxMap_task =  asyncio.create_task(build_admissions_diagnosis(diagnosis_file))
+    admPxMap_task =  asyncio.create_task(build_admissions_procedure(procedure_file))
+    admDrugMap_task =  asyncio.create_task(build_admissions_drug(prescription_file, choice))
+
+    notes_task =  asyncio.create_task(load_notes(note_file, index_col, load_note))
+
+
+    (subject_id_adm_map, admDxMap, admPxMap, (drugDescription, admDrugMap), notes) = await asyncio.gather(
+        subject_id_adm_map_task,
+        admDxMap_task,
+        admPxMap_task,
+        admDrugMap_task,
+        notes_task
+    )
+
+    return subject_id_adm_map, admDxMap, admPxMap, admDrugMap, drugDescription, notes
+
+    
 def mean_std(dic):
     codes = [len(codes_adm) for codes_adm in dic.values()]
     mean = statistics.fmean(codes)
@@ -612,7 +658,7 @@ def filter_notes(notes : pd.DataFrame, subject_id_hadm_id_map : Dict[int, List[i
         filtered_subject_id_hadm_id_map (dict): The filtered subject_id_hadm_id_map dictionary.
 
     """
-    print(f'filtering notes where the subject has made less than {min_visits} sucessive visits...')
+    print(f'filtering notes where the subject has made less than {min_visits} successive visits...')
     subject_id_hadm_id_map_ = {}
     filtered_rows = []
     subjects_to_rm = 0

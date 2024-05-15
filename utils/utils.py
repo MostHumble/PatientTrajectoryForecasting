@@ -63,7 +63,7 @@ def load_data(path: str = 'outputData/originalData/' , updated_ids_to_types : bo
             return patients_visits_sequences, tokens_to_ids_map, code_types
         
 def get_paths(config: dict, strategy : str = None, predict_procedure : bool = False, predict_drugs : bool = False,
-               train : bool = False, processed_data = False) -> dict:
+               train : bool = False, processed_data = False, prepared_note_file : bool = True) -> dict:
     """
     creates relevant paths according the given parameters
 
@@ -73,6 +73,8 @@ def get_paths(config: dict, strategy : str = None, predict_procedure : bool = Fa
         predict_procedure (str): whether to load the files that contain procedure in the target sequences
         predict_drugs (str): whether to load the files that contain drugs in the target sequences
         train (bool): whether to return only the training path
+        processed_data (bool): whether to return only the processed data path
+        prepared_note_file (bool): whether to return the note file path
 
     Retruns:
         paths (dict): dictonnary that contrains all relevant paths
@@ -106,7 +108,10 @@ def get_paths(config: dict, strategy : str = None, predict_procedure : bool = Fa
         paths[mimic_file] = os.path.join(mimic_iv_path, path)
 
     for ccs_file, path in config['css_files'].items():
-        paths[ccs_file] = os.path.join(ccs_file_path, path)      
+        paths[ccs_file] = os.path.join(ccs_file_path, path) 
+    if not prepared_note_file:
+        paths['note_file'] = os.path.join(root, config['mimic_iv_notes_path'])
+
 
     return paths
     
