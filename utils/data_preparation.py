@@ -612,7 +612,7 @@ def filter_notes(notes : pd.DataFrame, subject_id_hadm_id_map : Dict[int, List[i
         filtered_subject_id_hadm_id_map (dict): The filtered subject_id_hadm_id_map dictionary.
 
     """
-    print(f'filtering notes where the subject has made less than {min_visits} sucessive visits...')
+    print(f'filtering notes where the subject has made less than {min_visits} successive visits...')
     subject_id_hadm_id_map_ = {}
     filtered_rows = []
     subjects_to_rm = 0
