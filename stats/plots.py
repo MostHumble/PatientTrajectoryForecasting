@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 from collections import Counter
 from matplotlib.ticker import MaxNLocator
 
-def plot_admission_distribution(subject_id_adm_map, num_visits = 15, save = False, dpi = 300, prefix = ''):
+def plot_admission_distribution(subject_id_adm_map, num_visits = 15, save = False, dpi = 600, prefix :str = '', title :str = ''):
     # Count the number of admissions per subject
     num_admissions_less = [len(admissions) for admissions in subject_id_adm_map.values() if len(admissions) < num_visits]
     num_admissions_more = [len(admissions) for admissions in subject_id_adm_map.values() if len(admissions) > num_visits]
@@ -34,7 +34,9 @@ def plot_admission_distribution(subject_id_adm_map, num_visits = 15, save = Fals
     axs[1].set_ylabel('Number of Subjects')
     axs[1].set_title(f'Cumulative distribution of Number of Subject per Number of Visits (> {num_visits} )')
     axs[1].plot(x, cumulative, marker='o', linestyle='-', color='red')
-    axs[1].yaxis.set_major_locator(MaxNLocator(integer=True))
+    axs[1].yaxis.set_major_locator(MaxNLocator(integer=True)) # Set the y-axis to integer values
+    if title:
+        plt.suptitle(title)
     plt.tight_layout()
           
     if save:
