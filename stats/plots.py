@@ -36,7 +36,7 @@ def plot_admission_distribution(subject_id_adm_map, num_visits = 15, save = Fals
     axs[1].plot(x, cumulative, marker='o', linestyle='-', color='red')
     axs[1].yaxis.set_major_locator(MaxNLocator(integer=True)) # Set the y-axis to integer values
     if title:
-        plt.suptitle(title)
+        plt.suptitle(title, fontsize=16)
     plt.tight_layout()
           
     if save:
