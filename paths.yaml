@@ -15,9 +15,9 @@ mimic_iv_notes_path : physionet.org/files/mimic-iv-note/2.2/note/discharge.csv.g
 # MIMIC-IV data files
 mimic_files:
   admission_file: hosp/admissions_sorted_sid_admtime.csv.gz  # Admission data file (sorted by subject_id then admittime in ascending order)
-  diagnosis_file: hosp/diagnoses_icd.csv.gz  # Diagnosis data file
-  procedure_file: hosp/procedures_icd.csv.gz  # Procedure data file
-  prescription_file: hosp/prescriptions.csv.gz  # Prescription data file
+  diagnosis_file: hosp/diagnoses_icd_sorted_hadim_seq_num.csv.gz # Diagnosis data file (sorted by hadm_id then seq_num in ascending order)
+  procedure_file: hosp/procedures_icd_sorted_hadim_seq_num.csv.gz # Procedure data file (sorted by hadm_id then seq_num in ascending order)
+  prescription_file: hosp/prescriptions_sorted_sid_startt.csv.gz  # Prescription data file (sorted by subject_id then start time in ascending order, filtered null, zero, and len != 11 ndc codes)
   note_file: note/discharge.csv.gz  # Note data file
 
 
