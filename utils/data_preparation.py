@@ -33,9 +33,9 @@ def get_drugs_from_mimic_file(fileName :str, choice : str) -> Tuple[Dict[str, st
             tokens = line.decode('utf-8').strip().split(',')
             hadm_id = int(tokens[1])
             if choice =='ndc':
-                drug_code = tokens[12]
+                drug_code = tokens[3]
             else:
-                drug_code = tokens[11]
+                drug_code = tokens[2]
             drug_code = drug_code.strip()
             drug_code = 'DR'+'_'+drug_code
             if hadm_id in mapping:
@@ -43,7 +43,7 @@ def get_drugs_from_mimic_file(fileName :str, choice : str) -> Tuple[Dict[str, st
             else:
                 mapping[hadm_id]=[drug_code.strip()]
             if drug_code not in drugDescription:
-                drugDescription[drug_code] = tokens[9]
+                drugDescription[drug_code] = tokens[4]
     except Exception as e:
         print(e)
     mimicFile.close()
@@ -699,15 +699,16 @@ def build_data(subject_id_adm_map : Dict[int, List[int]], adDx: Dict[int, List[i
     
     adPx, adDx, adDrug = map(lambda d: defaultdict(list, d), (adPx, adDx, adDrug)) # add default [] for missing values
 
-    pid_seq_map = {}
-    
+    sid_seq_map = {}
+
+    print('Building subject-id, diagnosis, procedure, drugs mapping')
+
     for subject_id, adm_id_list in subject_id_adm_map.items():
 
-        pid_seq_map[subject_id] = [(adDx[adm_id], adPx[adm_id], adDrug[adm_id]) for adm_id in adm_id_list]
+        sid_seq_map[subject_id] = [(adDx[adm_id], adPx[adm_id], adDrug[adm_id]) for adm_id in adm_id_list]
         
-    print('Building subject-id, diagnosis, procedure, drugs mapping')
     seqs = []
-    for subject_id, visits in pid_seq_map.items():
+    for _ , visits in sid_seq_map.items():
         seq = []
         for visit in visits:
             # chain.from_iterable flattens the list of lists
@@ -716,25 +717,21 @@ def build_data(subject_id_adm_map : Dict[int, List[int]], adDx: Dict[int, List[i
             joined = list(dict.fromkeys(chain.from_iterable(visit)))
             seq.append(joined)
         seqs.append(seq)
-
+    # to_review
     print('Converting Strings Codes into unique integer, and making types')
-    types = {}
+    codes_to_ids = defaultdict(lambda: len(codes_to_ids))
     new_seqs = []
     for patient in seqs:
         new_patient = []
         for visit in patient:
             new_visit = []
             for code in visit:
-                if code in types:
-                    new_visit.append(types[code])
-                else:
-                    types[code] = len(types)
-                    new_visit.append(types[code])
+                new_visit.append(codes_to_ids[code])
             new_patient.append(new_visit)
         new_seqs.append(new_patient)
-    return new_seqs, types
+    return new_seqs, dict(codes_to_ids)
 
-def remove_code(currentSeqs : List[List[List[int]]], types, threshold :int = 5) -> Tuple[List[List[List[int]]], Dict[str, int], Dict[int, str]]:
+def remove_code(currentSeqs : List[List[List[int]]], tokens_to_ids, threshold :int = 5) -> Tuple[List[List[List[int]]], Dict[str, int], Dict[int, str]]:
     """
     Removes infrequent codes from the given sequences.
 
@@ -757,17 +754,17 @@ def remove_code(currentSeqs : List[List[List[int]]], types, threshold :int = 5) 
     print(f" Total number of codes removed: {len(codes)}  ")
     print(f" Total number of  unique codes : {len(countCode)}  ")
 
-    reverseTypes = {v:k for k,v in types.items()}
+    ids_to_tokens = {v:k for k,v in tokens_to_ids.items()}
 
     # List of codes like : D9_660...
-    types = defaultdict(lambda: len(types), {"PAD": 0,"BOH":1 ,"BOS": 2, "BOV": 3, "EOV": 4, "EOH": 5})
+    tokens_to_ids = defaultdict(lambda: len(tokens_to_ids), {"PAD": 0,"BOH":1 ,"BOS": 2, "BOV": 3, "EOV": 4, "EOH": 5})
 
     # Recreates a new mapping while taking into consideration the removed tokens
-    updatedSeqs = [[[types[reverseTypes[code]] for code in visit if code not in codes] for visit in patient] for patient in currentSeqs]
+    updatedSeqs = [[[tokens_to_ids[ids_to_tokens[code]] for code in visit if code not in codes] for visit in patient] for patient in currentSeqs]
     
-    reverseTypes = {v:k for k,v in types.items()}
+    ids_to_tokens = {v:k for k,v in tokens_to_ids.items()}
 
-    return updatedSeqs, dict(types), reverseTypes
+    return updatedSeqs, dict(tokens_to_ids), ids_to_tokens
 
 def generate_code_types(reverseTypes: Dict[int, str], outFile : str = 'outputData/originalData/') -> Dict[str, int] :
     """
