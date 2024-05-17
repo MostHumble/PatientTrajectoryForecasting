@@ -345,41 +345,24 @@ def create_CCS_CCSR_mapping(CCSRDX_file : str, CCSRPCS_file : str, CCSDX_file : 
     Returns:
         dict: A dictionary mapping CCS codes to their descriptions.
     """
-    # This part creates an ICD-10 Diagnosis, Procedures map to CCS token list
-    df = pd.read_csv(CCSRDX_file)
-    a = df[["'ICD-10-CM CODE'", "'CCSR CATEGORY 1'", "'CCSR CATEGORY 2'", "'CCSR CATEGORY 3'", "'CCSR CATEGORY 4'", "'CCSR CATEGORY 5'", "'CCSR CATEGORY 6'"]]
-
-    a = a.map(lambda x: str(x)[1:-1])
-
-    a = a.set_index("'ICD-10-CM CODE'").T.to_dict('list')
-    # remove null values
-    for key, value in a.items():
-        newValue = []
-        value = list(filter(lambda x: x.strip(), value))
-        for value in value:
-            newValue.append('D10_' + value)
-        a[key] = newValue
-
+    # This part creates an ICD-10 Diagnosis, Procedures map to CCS
     b = {}
-    for key in a.keys():
-        new_key = 'D10_' + key
-        b[new_key] = a[key]
 
-    df = pd.read_csv(CCSRPCS_file, on_bad_lines='skip')
-    df = df[["'ICD-10-PCS'", "'PRCCSR'"]]
+    df = pd.read_csv(CCSRDX_file)
+    df = df[["'ICD-10-CM CODE'", "'CCSR CATEGORY 1'", "'CCSR CATEGORY 2'", "'CCSR CATEGORY 3'", "'CCSR CATEGORY 4'", "'CCSR CATEGORY 5'", "'CCSR CATEGORY 6'"]]
     df = df.map(lambda x: str(x)[1:-1])
-    df = df.set_index("'ICD-10-PCS'").T.to_dict('list')
-
+    df = df.set_index("'ICD-10-CM CODE'").T.to_dict('list')
+    # remove null values
     for key, value in df.items():
-        newValue = []
-        value = list(filter(lambda x: x.strip(), value))
-        for value in value:
-            newValue.append('P10_' + value)
-        df[key] = newValue
+        value = list(map(lambda x: 'D10_' + x.strip("'").strip(), value))
+        b['D10_' + key.strip("'")] = value
 
-    for key in df.keys():
-        new_key = 'P10_' + key
-        b[new_key] = df[key]
+    # ICD-10 procedure code and prescription to CCS
+
+    df = pd.read_csv(CCSRPCS_file)[["'ICD-10-PCS'","'PRCCSR'"]].set_index("'ICD-10-PCS'").T.to_dict('list')
+    for key, value in df.items():
+        value = list(map(lambda x: 'P10_' + x.strip("'").strip(), value))
+        b['P10_' +key.strip("'")] = value
 
     # ICD-9 diagnosis code and prescription to CCS
     ccsTOdescription_Map = {}
@@ -401,6 +384,7 @@ def create_CCS_CCSR_mapping(CCSRDX_file : str, CCSRPCS_file : str, CCSDX_file : 
         tokens = line.strip().split(',')
         b['P9_' + str(tokens[0][1:-1]).strip()] = 'P9_' + str(tokens[1][1:-1]).strip()
         ccsTOdescription_Map['P9_' + str(tokens[1][1:-1]).strip()] = str(tokens[2][1:-1]).strip()
+        
     dxprref_ccs_file.close()
 
     if dump:
@@ -473,15 +457,16 @@ def map_ICD_to_CCSR(mapping : Dict[int, List[int]]) -> Tuple[Dict[int, List[str]
     countICD10 =0
     for (hadm_id, ICDs_List) in mapping.items():
         for ICD in ICDs_List:
-            if ICD.startswith('D10_'):
-                padStr = 'D10_'
-                countICD10 +=1
-            elif ICD.startswith('D9_'):
+
+            if ICD.startswith('D9_'):
                 padStr = 'D9_'
                 countICD9 +=1
             elif ICD.startswith('P10_'):
                 padStr = 'P10_'    
-                countICD9 += 1
+                countICD10 += 1
+            if ICD.startswith('D10_'):
+                padStr = 'D10_'
+                countICD10 +=1                
             elif ICD.startswith('P9_'):
                 padStr = 'P9_'  
                 countICD9 += 1
@@ -586,7 +571,7 @@ def icd_mapping(CCSRDX_file: str, CCSRPCS_file: str, CCSDX_file: str, CCSPX_file
     codeDescription['BOS'] = 'Beginning of sequence'
     codeDescription['PAD'] = 'Padding'
     display_code_stats(adDx,adPx,adDrug)
-    return adDx,adPx,codeDescription
+    return adDx,adPx,codeDescription, missingPxCodes
 
 
 def trim(adDx  : Dict[int,List[int]], adPx  : Dict[int,List[int]], adDrug  : Dict[int,List[int]], max_dx : int, max_px : int, max_drg: int)\
