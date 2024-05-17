@@ -354,14 +354,14 @@ def create_CCS_CCSR_mapping(CCSRDX_file : str, CCSRPCS_file : str, CCSDX_file : 
     df = df.set_index("'ICD-10-CM CODE'").T.to_dict('list')
     # remove null values
     for key, value in df.items():
-        value = list(map(lambda x: 'D10_' + x.strip("'").strip(), value))
+        value = ['D10_' + x.strip("'").strip() for x in value if x.strip()]
         b['D10_' + key.strip("'")] = value
 
     # ICD-10 procedure code and prescription to CCS
 
     df = pd.read_csv(CCSRPCS_file)[["'ICD-10-PCS'","'PRCCSR'"]].set_index("'ICD-10-PCS'").T.to_dict('list')
     for key, value in df.items():
-        value = list(map(lambda x: 'P10_' + x.strip("'").strip(), value))
+        value = ['P10_' + x.strip("'").strip() for x in value if x.strip()]
         b['P10_' +key.strip("'")] = value
 
     # ICD-9 diagnosis code and prescription to CCS
