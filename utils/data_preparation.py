@@ -348,7 +348,7 @@ def create_CCS_CCSR_mapping(CCSRDX_file : str, CCSRPCS_file : str, CCSDX_file : 
     # This part creates an ICD-10 Diagnosis, Procedures map to CCS
     b = {}
 
-    df = pd.read_csv(CCSRDX_file)
+    df = pd.read_csv(CCSRDX_file, low_memory = False)
     df = df[["'ICD-10-CM CODE'", "'CCSR CATEGORY 1'", "'CCSR CATEGORY 2'", "'CCSR CATEGORY 3'", "'CCSR CATEGORY 4'", "'CCSR CATEGORY 5'", "'CCSR CATEGORY 6'"]]
     df = df.map(lambda x: str(x)[1:-1])
     df = df.set_index("'ICD-10-CM CODE'").T.to_dict('list')
@@ -415,11 +415,13 @@ def map_ccsr_description(filename: str, cat: str = 'Diag') -> Dict[str, str]:
     """
     if cat == 'Diag':
         padStr = 'D10_'
+        df = pd.read_excel(filename, sheet_name="CCSR_Categories", skiprows=1)
+
     else:
         padStr = 'P10_'
-    df = pd.read_excel(filename, sheet_name="CCSR_Categories", skiprows=1)
-    if type != 'Diag':
+        df = pd.read_excel(filename, sheet_name="CCSR Categories", skiprows=1)
         df = df[:-1]
+
     codeDescription = df[["CCSR Category", "CCSR Category Description"]]
     codeDescription = codeDescription.map(lambda x: padStr + str(x))
     codeDescription = codeDescription.set_index("CCSR Category").T.to_dict('list')
@@ -464,7 +466,7 @@ def map_ICD_to_CCSR(mapping : Dict[int, List[int]]) -> Tuple[Dict[int, List[str]
             elif ICD.startswith('P10_'):
                 padStr = 'P10_'    
                 countICD10 += 1
-            if ICD.startswith('D10_'):
+            elif ICD.startswith('D10_'):
                 padStr = 'D10_'
                 countICD10 +=1                
             elif ICD.startswith('P9_'):
@@ -554,7 +556,9 @@ def icd_mapping(CCSRDX_file: str, CCSRPCS_file: str, CCSDX_file: str, CCSPX_file
     # creating mappint between all ICD codes to CCS and CCSR mapping
     ccsTOdescription_Map = create_CCS_CCSR_mapping(CCSRDX_file,CCSRPCS_file,CCSDX_file,CCSPX_file)
     # getting the description of all codes
+    print('creating diagnosis code description...')
     DxcodeDescription = map_ccsr_description(D_CCSR_Ref_file)
+    print('creating procedure code description...')
     PxcodeDescription = map_ccsr_description(P_CCSR_Ref_file, cat = 'Proc')
     codeDescription ={**DxcodeDescription ,**PxcodeDescription }
     codeDescription ={**codeDescription, **convValuestoList(ccsTOdescription_Map), **drugDescription}
@@ -571,7 +575,7 @@ def icd_mapping(CCSRDX_file: str, CCSRPCS_file: str, CCSDX_file: str, CCSPX_file
     codeDescription['BOS'] = 'Beginning of sequence'
     codeDescription['PAD'] = 'Padding'
     display_code_stats(adDx,adPx,adDrug)
-    return adDx,adPx,codeDescription, missingPxCodes
+    return adDx,adPx,codeDescription, missingPxCodes, missingDxCodes
 
 
 def trim(adDx  : Dict[int,List[int]], adPx  : Dict[int,List[int]], adDrug  : Dict[int,List[int]], max_dx : int, max_px : int, max_drg: int)\
