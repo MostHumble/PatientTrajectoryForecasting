@@ -23,12 +23,12 @@ mimic_files:
 
 # CCS files
 css_files:
-  CCSRDX_file: DXCCSR_v2021-2.csv  # CCS DX file
-  CCSRPCS_file: PRCCSR_v2021-1.CSV  # CCS Procedure file
+  CCSRDX_file: DXCCSR_v2024-1.csv  # CCS DX file
+  CCSRPCS_file: PRCCSR-v2024-1.csv  # CCS Procedure file
   CCSDX_file: $dxref 2015.csv  # CCSDX file
   CCSPX_file: $prref 2015.csv  # CCSPX files
-  D_CCSR_Ref_file: DXCCSR-Reference-File-v2021-2.xlsx  # CCS DX reference file
-  P_CCSR_Ref_file: PRCCSR-Reference-File-v2021-1.xlsx  # CCS Procedure reference file
+  D_CCSR_Ref_file: DXCCSR-Reference-File-v2024-1.xlsx  # CCS DX reference file
+  P_CCSR_Ref_file: PRCCSR-Reference-File-v2024-1.xlsx  # CCS Procedure reference file
 
 # # Output directories
 output_files:
