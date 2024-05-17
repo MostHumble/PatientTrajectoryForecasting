@@ -415,19 +415,26 @@ def map_ccsr_description(filename: str, cat: str = 'Diag') -> Dict[str, str]:
     """
     if cat == 'Diag':
         padStr = 'D10_'
-        df = pd.read_excel(filename, sheet_name="CCSR_Categories", skiprows=1)
+        codeDescription = pd.read_excel(filename, sheet_name="CCSR_Categories", skiprows=1)[["CCSR Category", "CCSR Category Description"]]
 
     else:
         padStr = 'P10_'
-        df = pd.read_excel(filename, sheet_name="CCSR Categories", skiprows=1)
-        df = df[:-1]
+        codeDescription = pd.read_excel(filename, sheet_name="CCSR Categories", skiprows=1)[["CCSR Category", "CCSR Category Description"]]
 
-    codeDescription = df[["CCSR Category", "CCSR Category Description"]]
-    codeDescription = codeDescription.map(lambda x: padStr + str(x))
+    # Identify duplicate values in 'CCSR Category' column
+    codeDescription.dropna(inplace = True)
+    duplicate_mask = codeDescription['CCSR Category'].duplicated( keep = False)
+    # Filter the DataFrame to include only rows with duplicate 'CCSR Category'
+    duplicates_df = codeDescription[duplicate_mask]
+
+    # For each duplicate 'CCSR Category', keep the row with the longest 'CCSR Category Description'
+    longest_descriptions_df = duplicates_df.loc[
+    duplicates_df.groupby('CCSR Category')['CCSR Category Description'].apply(lambda x: x.str.len().idxmax())
+    ]
+    non_duplicates_df = codeDescription[~duplicate_mask]
+    codeDescription = pd.concat([non_duplicates_df, longest_descriptions_df]).sort_index()
+    codeDescription['CCSR Category'] = codeDescription['CCSR Category'].map(lambda x: padStr + str(x))
     codeDescription = codeDescription.set_index("CCSR Category").T.to_dict('list')
-    for key, value in codeDescription.items():
-        newValue = value[0][4:]
-        codeDescription[key] = newValue
 
     return codeDescription
 
