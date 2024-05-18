@@ -100,7 +100,7 @@ def get_ICDs_from_mimic_file(fileName: str, isdiagnosis: bool = True) -> Dict[in
 
         # since diagnosis and procedure ICD9 codes have intersections, a prefix is necessary for disambiguation
         if isdiagnosis:
-            ICD_code = 'D' + tokens[4]+ '_' +ICD_code
+            ICD_code = 'D' + tokens[4]+ '_' + ICD_code
         else:
             ICD_code = 'P' + tokens[5] + '_' + ICD_code
 
@@ -468,16 +468,12 @@ def map_ICD_to_CCSR(mapping : Dict[int, List[int]]) -> Tuple[Dict[int, List[str]
         for ICD in ICDs_List:
 
             if ICD.startswith('D9_'):
-                padStr = 'D9_'
                 countICD9 +=1
             elif ICD.startswith('P10_'):
-                padStr = 'P10_'    
                 countICD10 += 1
             elif ICD.startswith('D10_'):
-                padStr = 'D10_'
                 countICD10 +=1                
             elif ICD.startswith('P9_'):
-                padStr = 'P9_'  
                 countICD9 += 1
             else:
                 print("Wrong coding format")
@@ -497,7 +493,7 @@ def map_ICD_to_CCSR(mapping : Dict[int, List[int]]) -> Tuple[Dict[int, List[str]
                         CodesToInternalMap[hadm_id] = [CCS_code]
                     else:
                         for i in range(len(CCS_code)):
-                            if i==0:
+                            if i == 0:
                                 CodesToInternalMap[hadm_id] = [CCS_code[i]]
                             else:
                                 CodesToInternalMap[hadm_id].append(CCS_code[i])
