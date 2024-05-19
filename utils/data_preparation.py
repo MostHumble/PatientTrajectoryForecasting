@@ -209,7 +209,6 @@ async def load_mimic_data(admission_file : str, diagnosis_file : str, procedure_
     admDxMap_task =  asyncio.create_task(build_admissions_diagnosis(diagnosis_file))
     admPxMap_task =  asyncio.create_task(build_admissions_procedure(procedure_file))
     admDrugMap_task =  asyncio.create_task(build_admissions_drug(prescription_file, choice))
-
     notes_task =  asyncio.create_task(load_notes(note_file, index_col, load_note))
 
 
@@ -460,7 +459,6 @@ def map_ICD_to_CCSR(mapping : Dict[int, List[int]]) -> Tuple[Dict[int, List[str]
     icdTOCCS_Map = pickle.load(open('ICD_9_10_to_CSS','rb'))
     CodesToInternalMap = {}
     missingCodes = []
-    set_of_used_codes = set()
     number_of_codes_missing = 0
     countICD9=0
     countICD10 =0
@@ -499,7 +497,6 @@ def map_ICD_to_CCSR(mapping : Dict[int, List[int]]) -> Tuple[Dict[int, List[str]
                                 CodesToInternalMap[hadm_id].append(CCS_code[i])
                                 
                             
-                set_of_used_codes.add(ICD)
 
             except KeyError:
                 missingCodes.append(ICD)
@@ -509,10 +506,9 @@ def map_ICD_to_CCSR(mapping : Dict[int, List[int]]) -> Tuple[Dict[int, List[str]
             
     print(f"- Total number of ICD9 codes used {countICD9} and ICD10 codes: {countICD10}")  
     print ('- Total number (complete set) of ICD9+ICD10 codes (diag + proc): ' + str(len(set(icdTOCCS_Map.keys()))))
-    print ('- Total number of ICD codes actually used: ' + str(len(set_of_used_codes)))
     print ('- Total number of ICD codes missing in the admissions list: ' , number_of_codes_missing)
     
-    return CodesToInternalMap,missingCodes,set_of_used_codes
+    return CodesToInternalMap, missingCodes
 
 def min_max_codes(dic):
     countCode = []
@@ -567,10 +563,10 @@ def icd_mapping(CCSRDX_file: str, CCSRPCS_file: str, CCSDX_file: str, CCSPX_file
     codeDescription ={**codeDescription, **convValuestoList(ccsTOdescription_Map), **drugDescription}
     # mapping diagnois codes
     print('addmision diagnosis codes...')
-    adDx, missingDxCodes, set_of_used_codes1 = map_ICD_to_CCSR(adDx)
+    adDx, missingDxCodes  = map_ICD_to_CCSR(adDx)
     # mapping procedure codes
     print('addmision procedure codes...')
-    adPx, missingPxCodes, set_of_used_codes2 = map_ICD_to_CCSR(adPx)
+    adPx, missingPxCodes = map_ICD_to_CCSR(adPx)
     codeDescription['SOH'] = 'Start of history'
     codeDescription['EOH'] = 'End of history'
     codeDescription['BOV'] = 'Beginning of visit'
@@ -635,42 +631,42 @@ def filter_subjects(subject_id_adm_map : Dict[int, List[int]], min_visits: int =
     return subject_id_adm_map_
 
 
-def filter_notes(notes : pd.DataFrame, subject_id_hadm_id_map : Dict[int, List[int]],
+def filter_notes(notes : pd.DataFrame, subject_id_adm_map : Dict[int, List[int]],
                   min_visits: int = 2) -> Tuple[pd.DataFrame, Dict[int, List[int]]]:
     """
     Filters the notes dataframe based on the given subject_id_hadm_id_map and minimum number of visits.
 
     Args:
         notes (pandas.DataFrame): The dataframe containing the notes.
-        subject_id_hadm_id_map (dict): A dictionary mapping subject IDs to a list of associated HADM IDs.
+        subject_id_adm_map (dict): A dictionary mapping subject IDs to a list of associated HADM IDs.
         min_visits (int): The minimum number of visits required for a subject to be included.
 
     Returns:
         filtered_notes (pandas.DataFrame): The filtered notes dataframe.
-        filtered_subject_id_hadm_id_map (dict): The filtered subject_id_hadm_id_map dictionary.
+        subject_id_adm_map_ (dict): The filtered subject_id_hadm_id_map dictionary.
 
     """
     print(f'filtering notes where the subject has made less than {min_visits} successive visits...')
-    subject_id_hadm_id_map_ = {}
+    subject_id_adm_map_ = {}
     filtered_rows = []
     subjects_to_rm = 0
     visits_to_rm = 0
-    for subject_id, hadm_ids in subject_id_hadm_id_map.items():
+    for subject_id, hadm_ids in subject_id_adm_map.items():
         temp_df = notes[notes['subject_id'] == subject_id]
         if set(temp_df.index).issuperset(set(hadm_ids)):
             filtered_rows.extend(hadm_ids)
-            subject_id_hadm_id_map_[subject_id] = hadm_ids
+            subject_id_adm_map_[subject_id] = hadm_ids
         else:
             temp_hadm_ids = list(takewhile(lambda x: x in set(temp_df.index), hadm_ids))
 
             if len(temp_hadm_ids) > min_visits:
-                subject_id_hadm_id_map_[subject_id] = temp_hadm_ids
+                subject_id_adm_map_[subject_id] = temp_hadm_ids
                 filtered_rows.extend(temp_hadm_ids)
             else:
                 subjects_to_rm += 1
                 visits_to_rm += len(hadm_ids)
     print(f'found {subjects_to_rm} subjects and {visits_to_rm} visits that need to be removed')
-    return notes.loc[filtered_rows], subject_id_hadm_id_map_
+    return notes.loc[filtered_rows], subject_id_adm_map_
 
 def build_data(subject_id_adm_map : Dict[int, List[int]], adDx: Dict[int, List[int]],
                 adPx: Dict[int, List[int]],
@@ -802,11 +798,11 @@ def generate_code_types(reverseTypes: Dict[int, str], outFile : str = 'outputDat
                 print(keys, values)
 
     print(f'Number of Diagnosis codes: {countD}, Procedure codes: {countP}, Drug codes: {countDr}, special codes: {countT}')
-    pickle.dump(codeType, open(os.path.join(outFile , 'data.code_types'), 'wb'), -1)
+    pickle.dump(codeType, open(os.path.join(outFile , 'ids_to_types.pkl'), 'wb'), -1)
 
     return codeType
 
-def save_files(updatedSeqs : List[List[List[int]]], types : Dict[str, int], codeDescription : Dict[str, str], outFile : str = 'outputData/originalData/'):
+def save_files(patients_visits_sequences : List[List[List[int]]], types : Dict[str, int], codeDescription : Dict[str, str], outFile : str = 'outputData/originalData/'):
     """
     Save the updated sequences, types, and code description to files.
 
@@ -820,6 +816,6 @@ def save_files(updatedSeqs : List[List[List[int]]], types : Dict[str, int], code
     if not os.path.exists(outFile):
         os.makedirs(outFile)
     
-    pickle.dump(updatedSeqs, open(outFile + 'data.seqs', 'wb'), -1)
-    pickle.dump(types, open(outFile + 'data.types', 'wb'), -1)
-    pickle.dump(codeDescription, open(outFile + 'data.description', 'wb'), -1)
+    pickle.dump(patients_visits_sequences, open(outFile + 'patients_visits_sequences.pkl', 'wb'), -1)
+    pickle.dump(types, open(outFile + 'tokens_to_ids.pkl', 'wb'), -1)
+    pickle.dump(codeDescription, open(outFile + 'code_description.pkl', 'wb'), -1)
