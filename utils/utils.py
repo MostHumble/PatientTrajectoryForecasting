@@ -22,17 +22,16 @@ def load_data(path: str = 'outputData/originalData/' , updated_ids_to_types : bo
         """
         if train:
 
-            source_target_sequences = pickle.load(open(os.path.join(path, 'data.source_target_sequences'), 'rb'))
-            ids_to_types_map = pickle.load(open(os.path.join(path, 'data.ids_to_tokens_map'), 'rb'))
-            tokens_to_ids_map = pickle.load(open(os.path.join(path, 'data.tokens_to_ids_map'), 'rb'))
-            ids_to_tokens_map = pickle.load(open(os.path.join(path, 'data.ids_to_tokens_map'), 'rb'))
+            source_target_sequences = pickle.load(open(os.path.join(path, 'patients_visits_sequences.pkl'), 'rb'))
+            ids_to_types_map = pickle.load(open(os.path.join(path, 'ids_to_types.pkl'), 'rb'))
+            tokens_to_ids_map = pickle.load(open(os.path.join(path, 'tokens_to_ids.pkl'), 'rb'))
 
             if updated_ids_to_types:
                 updated_ids_to_types =  pickle.load(open(os.path.join(path, 'data.updated_ids_to_types'), 'rb'))
                 reverse_up_ids_to_types =  pickle.load(open(os.path.join(path, 'data.reverse_up_ids_to_types'), 'rb'))
-                return source_target_sequences, ids_to_types_map, tokens_to_ids_map, ids_to_tokens_map, updated_ids_to_types, reverse_up_ids_to_types
+                return source_target_sequences, ids_to_types_map, tokens_to_ids_map, updated_ids_to_types, reverse_up_ids_to_types
             
-            return source_target_sequences, ids_to_types_map, tokens_to_ids_map, ids_to_tokens_map
+            return source_target_sequences, ids_to_types_map, tokens_to_ids_map
         
         if processed_data:
 
@@ -56,11 +55,11 @@ def load_data(path: str = 'outputData/originalData/' , updated_ids_to_types : bo
 
         else:
         
-            patients_visits_sequences = pickle.load(open(os.path.join(path, 'data.patients_visits_sequences'), 'rb'))
-            tokens_to_ids_map = pickle.load(open(os.path.join(path, 'data.tokens_to_ids_map'), 'rb')) 
-            code_types = pickle.load(open(os.path.join(path, 'data.code_types'), 'rb'))
+            patients_visits_sequences = pickle.load(open(os.path.join(path, 'patients_visits_sequences.pkl'), 'rb'))
+            tokens_to_ids_map = pickle.load(open(os.path.join(path, 'tokens_to_ids.pkl'), 'rb')) 
+            ids_to_types_map = pickle.load(open(os.path.join(path, 'ids_to_types.pkl'), 'rb'))
 
-            return patients_visits_sequences, tokens_to_ids_map, code_types
+            return patients_visits_sequences, tokens_to_ids_map, ids_to_types_map
         
 def get_paths(config: dict, strategy : str = None, predict_procedure : bool = False, predict_drugs : bool = False,
                train : bool = False, processed_data = False,
