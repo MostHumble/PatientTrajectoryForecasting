@@ -77,9 +77,10 @@ def get_sequences(model, dataloader : torch.utils.data.dataloader.DataLoader,  s
     model.eval()
     pred_trgs = []
     targets = []
-
     with torch.inference_mode():
         for source_input_ids, target_input_ids in tqdm(dataloader, desc='scoring'):
+            batch_pred_trgs = []
+            batch_targets = []
             source_input_ids, target_input_ids = source_input_ids.to(DEVICE),target_input_ids.to(DEVICE)
             src_mask, source_padding_mask = create_source_mask(source_input_ids, source_pad_id, DEVICE) 
             memory = model.batch_encode(source_input_ids, src_mask, source_padding_mask)
@@ -93,8 +94,8 @@ def get_sequences(model, dataloader : torch.utils.data.dataloader.DataLoader,  s
                 eov_mask = pred_tokens == tgt_tokens_to_ids['EOV']
                 if eov_mask.any():
                     # extend with sequences that have reached EOV
-                    pred_trgs.extend(torch.cat((pred_trg[eov_mask],torch.tensor(tgt_tokens_to_ids['EOV'], device = DEVICE).unsqueeze(0).repeat(eov_mask.sum(), 1)),dim = -1).cpu().tolist())
-                    targets.extend(target_input_ids[eov_mask].cpu().tolist())
+                    batch_pred_trgs.extend(torch.cat((pred_trg[eov_mask],torch.tensor(tgt_tokens_to_ids['EOV'], device = DEVICE).unsqueeze(0).repeat(eov_mask.sum(), 1)),dim = -1).cpu().tolist())
+                    batch_targets.extend(target_input_ids[eov_mask].cpu().tolist())
                     # store corresponding target sequences
                     target_input_ids = target_input_ids[~eov_mask]
                     # break if all have reached EOV
@@ -104,5 +105,12 @@ def get_sequences(model, dataloader : torch.utils.data.dataloader.DataLoader,  s
                     memory = memory[~eov_mask]
                 else:
                     pred_trg = torch.cat((pred_trg, pred_tokens.unsqueeze(1)), dim=1)
+            # add elements that have never reached EOV
+            if len(dataloader) != len(batch_pred_trgs):
+                batch_pred_trgs.extend(pred_trg.cpu().tolist())
+                batch_targets.extend(target_input_ids.cpu().tolist())
+            pred_trgs.extend(batch_pred_trgs)
+            targets.extend(batch_targets)
+                
                 
     return pred_trgs, targets
