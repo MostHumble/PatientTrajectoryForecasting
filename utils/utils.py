@@ -1,8 +1,5 @@
 import os 
 import pickle
-import random
-import torch
-import numpy as np
 from typing import Dict, Tuple, List, Optional
 
 def load_data(path: str = 'outputData/originalData/' , updated_ids_to_types : bool = False,
@@ -22,31 +19,31 @@ def load_data(path: str = 'outputData/originalData/' , updated_ids_to_types : bo
         """
         if train:
 
-            source_target_sequences = pickle.load(open(os.path.join(path, 'patients_visits_sequences.pkl'), 'rb'))
+            source_target_sequences = pickle.load(open(os.path.join(path, 'source_target_sequences.pkl'), 'rb'))
             ids_to_types_map = pickle.load(open(os.path.join(path, 'ids_to_types.pkl'), 'rb'))
             tokens_to_ids_map = pickle.load(open(os.path.join(path, 'tokens_to_ids.pkl'), 'rb'))
-
+            ids_to_tokens_map = pickle.load(open(os.path.join(path, 'ids_to_tokens.pkl'), 'rb'))
             if updated_ids_to_types:
-                updated_ids_to_types =  pickle.load(open(os.path.join(path, 'data.updated_ids_to_types'), 'rb'))
-                reverse_up_ids_to_types =  pickle.load(open(os.path.join(path, 'data.reverse_up_ids_to_types'), 'rb'))
+                updated_ids_to_types =  pickle.load(open(os.path.join(path, 'updated_ids_to_types.pkl'), 'rb'))
+                reverse_up_ids_to_types =  pickle.load(open(os.path.join(path, 'reverse_up_ids_to_types.pkl'), 'rb'))
                 return source_target_sequences, ids_to_types_map, tokens_to_ids_map, updated_ids_to_types, reverse_up_ids_to_types
             
-            return source_target_sequences, ids_to_types_map, tokens_to_ids_map
+            return source_target_sequences, ids_to_types_map, tokens_to_ids_map, ids_to_tokens_map
         
         if processed_data:
 
-            source_sequences = pickle.load(open(os.path.join(path, 'data.source_sequences'), 'rb'))
+            source_sequences = pickle.load(open(os.path.join(path, 'source_sequences.pkl'), 'rb'))
 
-            target_sequences = pickle.load(open(os.path.join(path, 'data.target_sequences'), 'rb'))
+            target_sequences = pickle.load(open(os.path.join(path, 'target_sequences.pkl'), 'rb'))
 
             try:
-                new_to_old_ids_source = pickle.load(open(os.path.join(path, 'data.new_to_old_ids_source'), 'rb'))
+                new_to_old_ids_source = pickle.load(open(os.path.join(path, 'new_to_old_ids_source.pkl'), 'rb'))
             except:
                 print(f"new_to_old_ids_source file not availble, mapping is the same as the old one")
                 new_to_old_ids_source = None
 
             try:
-                new_to_old_ids_target = pickle.load(open(os.path.join(path, 'data.new_to_old_ids_target'), 'rb'))
+                new_to_old_ids_target = pickle.load(open(os.path.join(path, 'new_to_old_ids_target.pkl'), 'rb'))
             except:
                 print(f"new_to_old_ids_target file not availble, mapping is the same as the old one")
                 new_to_old_ids_target = None
@@ -95,13 +92,13 @@ def get_paths(config: dict, strategy : str = None, predict_procedure : bool = Fa
 
     if train:
         if predict_procedure and predict_drugs :
-            paths['train_data_path'] = os.path.join(output_file, strategy, output_files['all_outputs_file'])
+            paths['train_data_path'] = os.path.join(root, output_file, strategy, output_files['all_outputs_file'])
         if predict_procedure and not(predict_drugs):
-            paths['train_data_path'] = os.path.join(output_file, strategy, output_files['diagnosis_procedure_output_file'])
+            paths['train_data_path'] = os.path.join(root, output_file, strategy, output_files['diagnosis_procedure_output_file'])
         else:
-            paths['train_data_path'] = os.path.join(output_file, strategy, output_files['diagnosis_output_file'])
+            paths['train_data_path'] = os.path.join(root, output_file, strategy, output_files['diagnosis_output_file'])
         if processed_data:
-            paths['processed_data_path'] = os.path.join(paths['train_data_path'], 'processed_data/')
+            paths['processed_data_path'] = os.path.join(root, paths['train_data_path'], 'processed_data/')
         return paths
         
     for mimic_file, path in config['mimic_files'].items():
@@ -138,33 +135,33 @@ def store_files(source_target_sequences : List[Tuple[List[int], List[int]]] = No
 
     if train:
         if updated_ids_to_types is not None:
-            pickle.dump(updated_ids_to_types, open(os.path.join(output_file, 'data.updated_ids_to_types'), 'wb'), -1)
+            pickle.dump(updated_ids_to_types, open(os.path.join(output_file, 'updated_ids_to_types.pkl'), 'wb'), -1)
             reverse_up_ids_to_types = {v: k for k, v in updated_ids_to_types.items()}
-            pickle.dump(reverse_up_ids_to_types, open(os.path.join(output_file, 'data.reverse_up_ids_to_types'), 'wb'), -1)  
+            pickle.dump(reverse_up_ids_to_types, open(os.path.join(output_file, 'reverse_up_ids_to_types.pkl'), 'wb'), -1)  
         if source_target_sequences is not None:
-            pickle.dump(source_target_sequences, open(os.path.join(output_file, 'data.source_target_sequences'), 'wb'), -1)
+            pickle.dump(source_target_sequences, open(os.path.join(output_file, 'source_target_sequences.pkl'), 'wb'), -1)
         if ids_to_types_map is not None:
-            pickle.dump(ids_to_types_map, open(os.path.join(output_file, 'data.ids_to_types_map'), 'wb'), -1)
+            pickle.dump(ids_to_types_map, open(os.path.join(output_file, 'ids_to_types.pkl'), 'wb'), -1)
         if tokens_to_ids_map is not None:
-            pickle.dump(tokens_to_ids_map, open(os.path.join(output_file, 'data.tokens_to_ids_map'), 'wb'), -1)
+            pickle.dump(tokens_to_ids_map, open(os.path.join(output_file, 'tokens_to_ids.pkl'), 'wb'), -1)
         if ids_to_tokens_map is not None:
-            pickle.dump(ids_to_tokens_map, open(os.path.join(output_file, 'data.ids_to_tokens_map'), 'wb'), -1)
+            pickle.dump(ids_to_tokens_map, open(os.path.join(output_file, 'ids_to_tokens.pkl'), 'wb'), -1)
         return
     if processed_data:
         if source_sequences is not None:
-            pickle.dump(source_sequences, open(output_file + 'data.source_sequences', 'wb'), -1)
+            pickle.dump(source_sequences, open(output_file + 'source_sequences.pkl', 'wb'), -1)
         if target_sequences is not None:
-            pickle.dump(target_sequences, open(output_file + 'data.target_sequences', 'wb'), -1)
+            pickle.dump(target_sequences, open(output_file + 'target_sequences.pkl', 'wb'), -1)
         if new_to_old_ids_source is not None:
-            pickle.dump(new_to_old_ids_source, open(output_file + 'data.new_to_old_ids_source', 'wb'), -1)
+            pickle.dump(new_to_old_ids_source, open(output_file + 'new_to_old_ids_source.pkl', 'wb'), -1)
         if new_to_old_ids_target is not None:
-            pickle.dump(new_to_old_ids_target, open(output_file + 'data.new_to_old_ids_target', 'wb'), -1)
+            pickle.dump(new_to_old_ids_target, open(output_file + 'new_to_old_ids_target.pkl', 'wb'), -1)
         return
     else:
         if patients_visits_sequences is not None:
-            pickle.dump(patients_visits_sequences, open(output_file + 'data.patients_visits_sequences', 'wb'), -1)
+            pickle.dump(patients_visits_sequences, open(output_file + 'patients_visits_sequences.pkl', 'wb'), -1)
         if tokens_to_ids_map is not None:
-            pickle.dump(tokens_to_ids_map, open(output_file + 'data.tokens_to_ids_map', 'wb'), -1)
+            pickle.dump(tokens_to_ids_map, open(output_file + 'tokens_to_ids.pkl', 'wb'), -1)
         if code_to_description_map is not None:
-            pickle.dump(code_to_description_map, open(output_file + 'data.code_to_description_map', 'wb'), -1)
+            pickle.dump(code_to_description_map, open(output_file + 'code_to_description.pkl', 'wb'), -1)
 

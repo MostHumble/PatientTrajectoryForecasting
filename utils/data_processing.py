@@ -108,7 +108,7 @@ def filter_codes(source_target_sequences : List[Tuple[List[List[int]], List[List
                   procedure : bool = False , drugs : bool = False, reset_target_map : bool = False)\
     -> Tuple[Tuple[List[List[int]]], Union[Dict[int, int]], None] :
     """
-    Filters the codes of target sequences to remove indicated types, and flattens the both sequnces.
+    Filters the codes of target sequences to remove indicated types, and flattens both sequnces.
 
     Args:
     - source_target_sequences (list): List of pairs containing the input and output sequences.
