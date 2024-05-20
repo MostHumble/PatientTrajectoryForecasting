@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 from collections import Counter
 from matplotlib.ticker import MaxNLocator
+import numpy as np
 
 def plot_admission_distribution(subject_id_adm_map, num_visits = 15, save = False, dpi = 600, prefix :str = '', title :str = ''):
     # Count the number of admissions per subject
@@ -42,3 +43,35 @@ def plot_admission_distribution(subject_id_adm_map, num_visits = 15, save = Fals
     if save:
         plt.savefig(f'./stats/figures/distribution_subject_num_visits_{prefix}_{num_visits}.png', dpi=dpi)
     plt.show()
+
+
+def plot_sequences_lenghts(lengths_source_sequences, lengths_target_sequences):
+    # Plot histograms
+    plt.figure(figsize=(14, 6))
+    
+    plt.subplot(1, 2, 1)
+    plt.hist(lengths_source_sequences, bins=10, alpha=0.7, color='blue')
+    plt.title('Source Sequence Lengths')
+    plt.xlabel('Length')
+    plt.ylabel('Frequency')
+    
+    plt.subplot(1, 2, 2)
+    plt.hist(lengths_target_sequences, bins=10, alpha=0.7, color='green')
+    plt.title('Target Sequence Lengths')
+    plt.xlabel('Length')
+    plt.ylabel('Frequency')
+    
+    plt.tight_layout()
+    plt.show()
+
+def plot_percentiles(lengths, title, color):
+    plt.figure(figsize=(10, 6))
+    percentiles = np.percentile(lengths, np.arange(0, 101, 1))
+    plt.plot(percentiles, np.arange(0, 101, 1), label=title, color=color)
+    plt.xlabel('Sequence Length')
+    plt.ylabel('Percentile')
+    plt.title('Percentile Plot of Sequence Lengths')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
