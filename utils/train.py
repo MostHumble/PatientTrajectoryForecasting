@@ -366,29 +366,20 @@ def get_data_loaders(train_batch_size=128, eval_batch_size=128, pin_memory=True,
         tuple: A tuple containing the train data loader, validation data loader, test data loader,
                source tokens to IDs map, target tokens to IDs map, IDs to types map, and data properties.
     """
-    
+    embedding_sizes = {}
     with open('PatientTrajectoryForecasting/paths.yaml', 'r') as file:
         path_config = yaml.safe_load(file)
 
     train_data_path = get_paths(path_config, strategy, predict_procedure, predict_drugs, train = True, processed_data = True)
 
-    _ , ids_to_types_map, tokens_to_ids_map, __ = load_data(train_data_path['train_data_path'], train = True)
+    #_ , ids_to_types_map, tokens_to_ids_map, __ = load_data(train_data_path['train_data_path'], train = True)
 
-    source_sequences, target_sequences, ___ , ____ = load_data(train_data_path['processed_data_path'], processed_data = True)
+    source_sequences, target_sequences, source_tokens_to_ids, target_tokens_to_ids, ___, ____ = load_data(train_data_path['processed_data_path'], processed_data = True)
 
-    data_and_properties = get_optimal_embedding_size(source_sequences, target_sequences)
+    embedding_sizes['embedding_size_source'] = ((len(source_tokens_to_ids) + 63) // 64) *64
+    embedding_sizes['embedding_size_target'] = ((len(target_tokens_to_ids) + 63) // 64) *64
 
-    if data_and_properties['old_to_new_ids_target'] is not None:
-            target_tokens_to_ids_map = {token: data_and_properties['old_to_new_ids_target'][idx] for token, idx in tokens_to_ids_map.items() if idx in data_and_properties['old_to_new_ids_target'].keys()}
-    else:
-        target_tokens_to_ids_map = tokens_to_ids_map
-
-    if data_and_properties['old_to_new_ids_source'] is not None:
-        source_tokens_to_ids = {token: data_and_properties['old_to_new_ids_source'][idx] for token, idx in tokens_to_ids_map.items() if idx in data_and_properties['old_to_new_ids_source'].keys()}   
-    else:
-        source_tokens_to_ids = tokens_to_ids_map
-
-    train, test, val = train_test_val_split(data_and_properties['source_sequences'], data_and_properties['target_sequences'], test_size = test_size, valid_size = valid_size, random_state = seed)
+    train, test, val = train_test_val_split(source_sequences, target_sequences, test_size = test_size, valid_size = valid_size, random_state = seed)
 
     train_set  = patientTrajectoryForcastingDataset(**train)
     test_set  = patientTrajectoryForcastingDataset(**test)
@@ -398,7 +389,7 @@ def get_data_loaders(train_batch_size=128, eval_batch_size=128, pin_memory=True,
     val_dataloader = DataLoader(val_set, batch_size = eval_batch_size, shuffle = False, pin_memory = pin_memory)
     test_dataloader = DataLoader(test_set, batch_size = eval_batch_size, shuffle = False, pin_memory = pin_memory)
 
-    return train_dataloader, val_dataloader, test_dataloader, source_tokens_to_ids, target_tokens_to_ids_map, ids_to_types_map, data_and_properties
+    return train_dataloader, val_dataloader, test_dataloader, source_tokens_to_ids, target_tokens_to_ids, None, embedding_sizes
 
 
 def save_checkpoint(epoch, model, optimizer, val_loss = float('inf'), force = False, prefix:str = '', run_num = 0,
