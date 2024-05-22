@@ -1,4 +1,10 @@
+import pandas
+from tqdm.auto import tqdm 
+
 class TextPreprocessor:
+    """
+    Preprocesses text data.
+    """
     def __init__(
         self,
         lower: bool = True,
@@ -46,3 +52,20 @@ class TextPreprocessor:
         note = note.strip()
         return note
     
+
+
+def make_chunks(notes : pandas.DataFrame):
+    text_data = []
+    file_count = 0
+    for sample in tqdm(notes['text']):
+        sample = sample.replace('\n', '')
+        text_data.append(sample)
+        if len(text_data) == 10_000:
+            # once we hit the 10K mark, save to file
+            with open(f'/scratch/enroot-sifal.klioui/notes/chunck_{file_count}.txt', 'w', encoding='utf-8') as fp:
+                fp.write('\n'.join(text_data))
+            text_data = []
+            file_count += 1
+    # after saving in 10K chunks, we will have ~2082 leftover samples, we save those now too
+    with open(f'/scratch/enroot-sifal.klioui/notes/chunck_{file_count}.txt', 'w', encoding='utf-8') as fp:
+        fp.write('\n'.join(text_data))
