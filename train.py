@@ -132,10 +132,10 @@ if __name__ == '__main__':
     config = Config()
     data_config = DataConfig()
 
-    train_dataloader, val_dataloader, test_dataloader, src_tokens_to_ids, tgt_tokens_to_ids, _, data_and_properties = get_data_loaders(train_batch_size=args.train_batch_size, eval_batch_size=args.train_batch_size*2, pin_memory=True, **asdict(data_config))
+    train_dataloader, val_dataloader, test_dataloader, src_tokens_to_ids, tgt_tokens_to_ids, _, embedding_sizes = get_data_loaders(train_batch_size=args.train_batch_size, eval_batch_size=args.train_batch_size*2, pin_memory=True, **asdict(data_config))
     
-    data_config.source_vocab_size = data_and_properties['embedding_size_source']
-    data_config.target_vocab_size = data_and_properties['embedding_size_target']
+    data_config.source_vocab_size = embedding_sizes['embedding_size_source']
+    data_config.target_vocab_size = embedding_sizes['embedding_size_target']
     data_config.target_pad_id = tgt_tokens_to_ids['PAD']
     data_config.source_pad_id = src_tokens_to_ids['PAD']
 

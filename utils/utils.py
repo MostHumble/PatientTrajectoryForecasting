@@ -36,19 +36,27 @@ def load_data(path: str = 'outputData/originalData/' , updated_ids_to_types : bo
 
             target_sequences = pickle.load(open(os.path.join(path, 'target_sequences.pkl'), 'rb'))
 
-            try:
-                new_to_old_ids_source = pickle.load(open(os.path.join(path, 'new_to_old_ids_source.pkl'), 'rb'))
+            try: 
+                old_to_new_ids_source = pickle.load(open(os.path.join(path, 'old_to_new_ids_source.pkl'), 'rb'))
             except:
-                print(f"new_to_old_ids_source file not availble, mapping is the same as the old one")
-                new_to_old_ids_source = None
+                print(f"old_to_new_ids_source file not availble, mapping is the same as the old one")
+                old_to_new_ids_source = None
 
             try:
-                new_to_old_ids_target = pickle.load(open(os.path.join(path, 'new_to_old_ids_target.pkl'), 'rb'))
+                old_to_new_ids_target = pickle.load(open(os.path.join(path, 'old_to_new_ids_target.pkl'), 'rb'))
             except:
                 print(f"new_to_old_ids_target file not availble, mapping is the same as the old one")
-                new_to_old_ids_target = None
+                old_to_new_ids_target = None
+            try:
+                source_tokens_to_ids = pickle.load(open(os.path.join(path, 'source_tokens_to_ids.pkl'), 'rb'))
+            except:
+                source_tokens_to_ids = None
+            try:
+                target_tokens_to_ids = pickle.load(open(os.path.join(path, 'target_tokens_to_ids.pkl'), 'rb'))
+            except:
+                target_tokens_to_ids = None    
 
-            return source_sequences, target_sequences, new_to_old_ids_source, new_to_old_ids_target
+            return source_sequences, target_sequences, source_tokens_to_ids, target_tokens_to_ids, old_to_new_ids_source, old_to_new_ids_target
 
         else:
         
@@ -116,11 +124,15 @@ def store_files(source_target_sequences : List[Tuple[List[int], List[int]]] = No
                 tokens_to_ids_map : Dict[str, int] = None,
                 ids_to_tokens_map : Dict[int, str] = None, 
                 updated_ids_to_types : Dict[int, int] = None,
-                patients_visits_sequences = None, types = None,
-                code_to_description_map = None, train = False,
+                patients_visits_sequences = None,
+                source_tokens_to_ids : Dict[str, int] = None,
+                target_tokens_to_ids : Dict[str, int ]= None,
+                types = None,
+                code_to_description_map = None,
+                train = False,
                 processed_data = False,
-                new_to_old_ids_source = None,
-                new_to_old_ids_target = None,
+                old_to_new_ids_source = None,
+                old_to_new_ids_target = None,
                 source_sequences = None,
                 target_sequences = None,
                 output_file : str = 'outputData/originalData/',
@@ -152,10 +164,15 @@ def store_files(source_target_sequences : List[Tuple[List[int], List[int]]] = No
             pickle.dump(source_sequences, open(output_file + 'source_sequences.pkl', 'wb'), -1)
         if target_sequences is not None:
             pickle.dump(target_sequences, open(output_file + 'target_sequences.pkl', 'wb'), -1)
-        if new_to_old_ids_source is not None:
-            pickle.dump(new_to_old_ids_source, open(output_file + 'new_to_old_ids_source.pkl', 'wb'), -1)
-        if new_to_old_ids_target is not None:
-            pickle.dump(new_to_old_ids_target, open(output_file + 'new_to_old_ids_target.pkl', 'wb'), -1)
+        if old_to_new_ids_source is not None:
+            pickle.dump(old_to_new_ids_source, open(output_file + 'old_to_new_ids_source.pkl', 'wb'), -1)
+        if old_to_new_ids_target is not None:
+            pickle.dump(old_to_new_ids_target, open(output_file + 'old_to_new_ids_target.pkl', 'wb'), -1)
+        if source_tokens_to_ids is not None:
+            pickle.dump(source_tokens_to_ids, open(output_file + 'source_tokens_to_ids.pkl', 'wb'), -1)
+        if target_tokens_to_ids is not None:
+            pickle.dump(target_tokens_to_ids, open(output_file + 'target_tokens_to_ids.pkl', 'wb'), -1)
+        
         return
     else:
         if patients_visits_sequences is not None:
