@@ -1,10 +1,8 @@
 import pandas
 from tqdm.auto import tqdm 
+import os
 
 class TextPreprocessor:
-    """
-    Preprocesses text data.
-    """
     def __init__(
         self,
         lower: bool = True,
@@ -23,40 +21,45 @@ class TextPreprocessor:
         self.remove_brackets = remove_brackets
         self.convert_danish_characters = convert_danish_characters
 
-    def __call__(self, note: str) -> str:
+    def __call__(self, df: pandas.DataFrame) -> pandas.DataFrame:
         if self.lower:
-            note = note.lower()
+            df['text'] = df['text'].str.lower()
         if self.convert_danish_characters:
-            note = note.replace("å", "aa", regex=True)
-            note = note.replace("æ", "ae", regex=True)
-            note = note.replace("ø", "oe", regex=True)
+            df['text'] = df['text'].str.replace("å", "aa", regex=True)
+            df['text'] = df['text'].str.replace("æ", "ae", regex=True)
+            df['text'] = df['text'].str.replace("ø", "oe", regex=True)
         if self.remove_accents:
-            note = note.replace("é|è|ê", "e", regex=True)
-            note = note.replace("á|à|â", "a", regex=True)
-            note = note.replace("ô|ó|ò", "o", regex=True)
+            df['text'] = df['text'].str.replace("é|è|ê", "e", regex=True)
+            df['text'] = df['text'].str.replace("á|à|â", "a", regex=True)
+            df['text'] = df['text'].str.replace("ô|ó|ò", "o", regex=True)
         if self.remove_brackets:
-            note = note.replace("\[[^]]*\]", "", regex=True)
+            df['text'] = df['text'].str.replace("\[[^]]*\]", "", regex=True)
         if self.remove_special_characters:
-            note = note.replace("\n|/|-", " ", regex=True)
-            note = note.replace(
+            df['text'] = df['text'].str.replace("\n|/|-", " ", regex=True)
+            df['text'] = df['text'].str.replace(
                 "[^a-zA-Z0-9 ]", "", regex=True
             )
         if self.remove_special_characters_mullenbach:
-            note = note.replace(
+            df['text'] = df['text'].str.replace(
                 "[^A-Za-z0-9]+", " ", regex=True
             )
         if self.remove_digits:
-            note = note.replace("(\s\d+)+\s", " ", regex=True)
+            df['text'] = df['text'].str.replace("(\s\d+)+\s", " ", regex=True)
 
-        note = note.replace("\s+", " ", regex=True)
-        note = note.strip()
-        return note
+        df['text'] = df['text'].str.replace("\s+", " ", regex=True)
+        df['text'] = df['text'].str.strip()
+        return df
+
     
 
 
 def make_chunks(notes : pandas.DataFrame):
     text_data = []
     file_count = 0
+    # make sure the notes folder exisits, if not create it and set permission to user owner only
+    if not os.path.exists('/scratch/enroot-sifal.klioui/notes'):
+        os.makedirs('/scratch/enroot-sifal.klioui/notes')
+        os.system('chmod 700 /scratch/enroot-sifal.klioui/notes')
     for sample in tqdm(notes['text']):
         sample = sample.replace('\n', '')
         text_data.append(sample)
