@@ -186,10 +186,13 @@ replace_LIST = [['dr\.',''] ,['DR\.','']
                 ,['[0-9]+\.','']]
 
 
-def preprocess_re_sub(x):
+def preprocess_re_sub(x : str , replace_LIST : list) -> str:
+    """
+    Preprocess text to replace common medical abbreviations with their full form
+    """
     processed_text = x
     for find,replace in replace_LIST:
-        processed_text=re.sub(find,replace,processed_text)
+        processed_text = re.sub(find,replace,processed_text)
     return processed_text
 
 import calendar
@@ -200,7 +203,8 @@ location_map = ['address', 'location' 'ward', 'state', 'country']
 name_map = 'name'
 number_map = ['number', 'telephone']
 date_map = ['month', 'year', 'day'] + [calendar.month_name[i].lower() for i in range(1,13)]
-def filter_brackets(text):
+
+def filter_brackets(text: str) -> str:
 
     unk_list = set(re.findall(r'\[\*.+?\*\]', text))
     unk_map = {}
@@ -240,18 +244,17 @@ def filter_brackets(text):
 from unidecode import unidecode
 
 def clean_excel_text(text):
+
     if not isinstance(text, str):
         return text
     ## Clean
     clean = text
     clean = re.sub('[\t\r\n]', '   ', clean)
     clean = re.sub(u'\xa0 ', ' ', clean)
-    clean = re.sub("'", '"', clean)
     clean = re.sub('&gt;', '>', clean)
     clean = re.sub('&lt;', '<', clean)
     clean = re.sub('&amp;', ' and ', clean)
     clean = re.sub('&#x20;', ' ', clean)
-    clean = re.sub('   ', '\n', clean)
     clean = re.sub('\u2022', '\t', clean)
     clean = re.sub('\x1d|\xa0|\x1c|\x14', ' ', clean)
     clean = re.sub('### invalid font number [0-9]+', ' ', clean)
