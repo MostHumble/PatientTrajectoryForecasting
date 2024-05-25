@@ -392,8 +392,9 @@ def get_data_loaders(train_batch_size=128, eval_batch_size=128, pin_memory=True,
     return train_dataloader, val_dataloader, test_dataloader, source_tokens_to_ids, target_tokens_to_ids, None, embedding_sizes
 
 
-def save_checkpoint(epoch, model, optimizer, val_loss = float('inf'), force = False, prefix:str = '', run_num = 0,
-                     threshold = 0.01, checkpoint_patience = 8, current_patience = 0, best_val_loss = float('inf')):
+def save_checkpoint(epoch, model, optimizer, val_loss = float('inf'),
+                    force = False, prefix:str = 'test_model', run_num = 0,
+                    checkpoint_patience = 3):
     """
     Saves a checkpoint of the model during training if the validation loss improves.
 
@@ -411,11 +412,14 @@ def save_checkpoint(epoch, model, optimizer, val_loss = float('inf'), force = Fa
     Returns:
         bool: False if the checkpoint is not saved, True otherwise.
     """
+    global current_patience, best_val_loss
+    
     model_checkpoint_dir = 'model_checkpoints'
-    os.makedirs(model_checkpoint_dir, exist_ok=True)
-
-    if force or (val_loss < (best_val_loss - threshold)):
-        best_val_loss = val_loss
+    os.makedirs(model_checkpoint_dir, exist_ok = True)
+    print(best_val_loss)
+    
+    if force or (val_loss < best_val_loss):
+        best_val_loss = min(val_loss, best_val_loss)
         current_patience = 0  # Reset patience counter
         checkpoint = {
             'epoch': epoch,
@@ -426,12 +430,13 @@ def save_checkpoint(epoch, model, optimizer, val_loss = float('inf'), force = Fa
         model_checkpoint_path = os.path.join(model_checkpoint_dir, f'{prefix}_best_checkpoint_run_{run_num}.pt')
         torch.save(checkpoint, model_checkpoint_path)
         print(f"Checkpoint saved at {model_checkpoint_path}")
+        return False
     else:
         current_patience += 1
-
         if current_patience >= checkpoint_patience:
             print(f"Validation loss hasn't improved for {current_patience} epochs. Stopping training.")
-    return False
+        return True
+   
 
 
 def load_checkpoint(run = 0, model_checkpoint_dir='/kaggle/working/model_checkpoints',config_dir='/kaggle/working/configs', return_optimizer_state:bool = False, prefix:str = ''):
