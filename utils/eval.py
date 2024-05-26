@@ -3,6 +3,7 @@ from tqdm import tqdm
 from utils.train import create_source_mask, generate_square_subsequent_mask
 from typing import List, Dict
 from numpy import mean as np_mean
+import numpy as np
 
 def get_k(sequence: List[int], k: int, spec_target_ids: torch.Tensor) -> List[int]:
     """
@@ -32,18 +33,24 @@ def apk(relevant: List[int], forecasted: List[int], spec_target_ids: torch.Tenso
         float: The Average Precision at K (AP@K) score.
 
     """
+    # filters out special tokens
     forecasted = get_k(forecasted, k, spec_target_ids)
     relevant = get_k(relevant, k, spec_target_ids)
     sum_precision = 0.0
     num_hits = 0.0
 
     for i, forecast in enumerate(forecasted):
+
         if forecast in relevant and forecast not in forecasted[:i]:
             num_hits += 1.0
             precision_at_i = num_hits / (i + 1.0)
             sum_precision += precision_at_i
 
-    return sum_precision / (num_hits + 1e-10)
+    if num_hits == 0.0:
+        return 0.0
+    
+    return sum_precision / num_hits 
+
 
 def mapk(relevant: List[List[int]], forecasted: List[List[int]], k :int = 10):
     """
@@ -58,8 +65,21 @@ def mapk(relevant: List[List[int]], forecasted: List[List[int]], k :int = 10):
         float: The mean average precision at k.
     """
     return np_mean([apk(r, f, k = k) for r, f in zip(relevant, forecasted)])
-    
-def get_sequences(model, dataloader : torch.utils.data.dataloader.DataLoader,  source_pad_id : int = 0, tgt_tokens_to_ids : Dict[str, int] =  None, max_len : int = 150,  DEVICE : str ='cuda:0'):
+
+def recallTop(y_true, y_pred, rank=[10, 20, 30]):
+    recall = list()
+    for i in range(len(y_pred)):
+        thisOne = list()
+        codes = y_true[i]
+        tops = y_pred[i]
+        for rk in rank:
+            predictions_at_k = len(set(codes).intersection(set(tops[:rk])))*1.0
+            thisOne.append(predictions_at_k/len(set(codes)))
+            recall.append( thisOne )
+    return (np.array(recall)).mean(axis=0).tolist()
+
+def get_sequences(model, dataloader : torch.utils.data.dataloader.DataLoader,  source_pad_id : int = 0,
+                   tgt_tokens_to_ids : Dict[str, int] =  None, max_len : int = 150,  DEVICE : str ='cuda:0'):
     """
     return relevant forcasted and sequences made by the model on the dataset.
 
@@ -91,26 +111,25 @@ def get_sequences(model, dataloader : torch.utils.data.dataloader.DataLoader,  s
                 output = model.decode(pred_trg, memory, trg_mask)
                 probs = model.generator(output[:, -1])
                 pred_tokens = torch.argmax(probs, dim=1)
+                pred_trg = torch.cat((pred_trg, pred_tokens.unsqueeze(1)), dim=1)
                 eov_mask = pred_tokens == tgt_tokens_to_ids['EOV']
+
                 if eov_mask.any():
                     # extend with sequences that have reached EOV
-                    batch_pred_trgs.extend(torch.cat((pred_trg[eov_mask],torch.tensor(tgt_tokens_to_ids['EOV'], device = DEVICE).unsqueeze(0).repeat(eov_mask.sum(), 1)),dim = -1).cpu().tolist())
-                    batch_targets.extend(target_input_ids[eov_mask].cpu().tolist())
-                    # store corresponding target sequences
-                    target_input_ids = target_input_ids[~eov_mask]
+                    batch_pred_trgs.extend(pred_trg[eov_mask].tolist())
+                    batch_targets.extend(target_input_ids[eov_mask].tolist())
                     # break if all have reached EOV
                     if eov_mask.all():
                         break  
-                    pred_trg = torch.cat((pred_trg[~eov_mask], pred_tokens[~eov_mask].unsqueeze(1)), dim=1)
+                    # edit corresponding target sequences
+                    target_input_ids = target_input_ids[~eov_mask]
+                    pred_trg = pred_trg[~eov_mask]
                     memory = memory[~eov_mask]
-                else:
-                    pred_trg = torch.cat((pred_trg, pred_tokens.unsqueeze(1)), dim=1)
+        
             # add elements that have never reached EOV
-            if len(dataloader) != len(batch_pred_trgs):
-                batch_pred_trgs.extend(pred_trg.cpu().tolist())
-                batch_targets.extend(target_input_ids.cpu().tolist())
+            if source_input_ids.size(0) != len(batch_pred_trgs):
+                batch_pred_trgs.extend(pred_trg.tolist())
+                batch_targets.extend(target_input_ids.tolist())
             pred_trgs.extend(batch_pred_trgs)
             targets.extend(batch_targets)
-                
-                
     return pred_trgs, targets
