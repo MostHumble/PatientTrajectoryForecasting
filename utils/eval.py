@@ -3,6 +3,7 @@ from tqdm import tqdm
 from utils.train import create_source_mask, generate_square_subsequent_mask
 from typing import List, Dict
 from numpy import mean as np_mean
+import numpy as np
 
 def get_k(sequence: List[int], k: int, spec_target_ids: torch.Tensor) -> List[int]:
     """
@@ -44,6 +45,18 @@ def apk(relevant: List[int], forecasted: List[int], spec_target_ids: torch.Tenso
             sum_precision += precision_at_i
 
     return sum_precision / (num_hits + 1e-10)
+
+def recallTop(y_true, y_pred, rank=[10, 20, 30]):
+    recall = list()
+    for i in range(len(y_pred)):
+        thisOne = list()
+        codes = y_true[i]
+        tops = y_pred[i]
+        for rk in rank:
+            predictions_at_k = len(set(codes).intersection(set(tops[:rk])))*1.0
+            thisOne.append(predictions_at_k/len(set(codes)))
+            recall.append( thisOne )
+    return (np.array(recall)).mean(axis=0).tolist()
 
 def mapk(relevant: List[List[int]], forecasted: List[List[int]], k :int = 10):
     """
