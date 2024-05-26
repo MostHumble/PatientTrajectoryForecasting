@@ -33,30 +33,24 @@ def apk(relevant: List[int], forecasted: List[int], spec_target_ids: torch.Tenso
         float: The Average Precision at K (AP@K) score.
 
     """
+    # filters out special tokens
     forecasted = get_k(forecasted, k, spec_target_ids)
     relevant = get_k(relevant, k, spec_target_ids)
     sum_precision = 0.0
     num_hits = 0.0
 
     for i, forecast in enumerate(forecasted):
+
         if forecast in relevant and forecast not in forecasted[:i]:
             num_hits += 1.0
             precision_at_i = num_hits / (i + 1.0)
             sum_precision += precision_at_i
 
-    return sum_precision / (num_hits + 1e-10)
+    if num_hits == 0.0:
+        return 0.0
+    
+    return sum_precision / num_hits 
 
-def recallTop(y_true, y_pred, rank=[10, 20, 30]):
-    recall = list()
-    for i in range(len(y_pred)):
-        thisOne = list()
-        codes = y_true[i]
-        tops = y_pred[i]
-        for rk in rank:
-            predictions_at_k = len(set(codes).intersection(set(tops[:rk])))*1.0
-            thisOne.append(predictions_at_k/len(set(codes)))
-            recall.append( thisOne )
-    return (np.array(recall)).mean(axis=0).tolist()
 
 def mapk(relevant: List[List[int]], forecasted: List[List[int]], k :int = 10):
     """
@@ -71,6 +65,18 @@ def mapk(relevant: List[List[int]], forecasted: List[List[int]], k :int = 10):
         float: The mean average precision at k.
     """
     return np_mean([apk(r, f, k = k) for r, f in zip(relevant, forecasted)])
+
+def recallTop(y_true, y_pred, rank=[10, 20, 30]):
+    recall = list()
+    for i in range(len(y_pred)):
+        thisOne = list()
+        codes = y_true[i]
+        tops = y_pred[i]
+        for rk in rank:
+            predictions_at_k = len(set(codes).intersection(set(tops[:rk])))*1.0
+            thisOne.append(predictions_at_k/len(set(codes)))
+            recall.append( thisOne )
+    return (np.array(recall)).mean(axis=0).tolist()
 
 def get_sequences(model, dataloader : torch.utils.data.dataloader.DataLoader,  source_pad_id : int = 0,
                    tgt_tokens_to_ids : Dict[str, int] =  None, max_len : int = 150,  DEVICE : str ='cuda:0'):
