@@ -6,6 +6,7 @@ import re
 class TextPreprocessor:
     def __init__(
         self,
+        clean_text: bool = True,
         lower: bool = True,
         remove_special_characters_mullenbach: bool = True,
         remove_special_characters: bool = False,
@@ -16,6 +17,7 @@ class TextPreprocessor:
         apply_replace: bool = True,
         remove_adm_details: bool = True
     ) -> None:
+        self.clean_text = clean_text
         self.lower = lower
         self.remove_special_characters_mullenbach = remove_special_characters_mullenbach
         self.remove_digits = remove_digits
@@ -27,7 +29,7 @@ class TextPreprocessor:
         self.remove_adm_details = remove_adm_details
         self.replace_list = [['dr\.',''] ,['DR\.','']
                 ,['m\.d\.',''] ,['M\.D\.','']
-                ,['yo', 'years old. ']
+                ,[' yo ', ' years old ']
                 ,['p\.o', 'orally. ']
                 ,['P\.O', 'orally. ']
                 ,[' po ', ' orally ']
@@ -64,12 +66,12 @@ class TextPreprocessor:
                 ,['hr(s)', 'hours']
                 ,['O\.D\.', 'in the right eye. ']
                 ,['o\.d\.', 'in the right eye. ']
-                ,['OD', 'in the right eye. ']
-                ,['od', 'in the right eye. ']
-                ,['5X', 'a day five times a day. ']
-                ,['5x', 'a day five times a day. ']
-                ,['OS', 'in the left eye. ']
-                ,['os', 'in the left eye. ']
+                ,[' OD ', ' in the right eye ']
+                ,[' od ', ' in the right eye ']
+                ,[' 5X ', ' a day five times a day ']
+                ,[' 5x ', ' a day five times a day ']
+                ,[' OS ', ' in the left eye ']
+                ,[' os ', ' in the left eye ']
                 ,['q\.4h', 'every four hours. ']
                 ,['Q\.4H', 'every four hours. ']
                 ,['q24h', 'every 24 hours. ']
@@ -107,7 +109,7 @@ class TextPreprocessor:
 
     def __call__(self, df: pandas.DataFrame) -> pandas.DataFrame:
 
-        if self.clean:
+        if self.clean_text:
             df['text'] = df['text'].apply(lambda x: self.clean(x))
         if self.apply_replace:
             df['text'] = df['text'].apply(lambda x: self.apply_replace_list(x))
@@ -148,7 +150,7 @@ class TextPreprocessor:
         Preprocess text to replace common medical abbreviations with their full form
         """
         processed_text = x
-        for find, replace in self.replace_LIST:
+        for find, replace in self.replace_list:
             processed_text = re.sub(find,replace,processed_text)
         return processed_text
     
@@ -166,24 +168,36 @@ class TextPreprocessor:
         return text
 
 
-def make_chunks(notes : pandas.DataFrame):
+def make_chunks(notes_path: str, text_preprocessor : TextPreprocessor, chunk_size : int = 10_000):
+    notes_reader = pandas.read_csv(notes_path, keep_default_na = False ,chunksize=chunk_size)
     text_data = []
-    file_count = 0
     # make sure the notes folder exisits, if not create it and set permission to user owner only
-    if not os.path.exists('/scratch/enroot-sifal.klioui/notes'):
-        os.makedirs('/scratch/enroot-sifal.klioui/notes')
-        os.system('chmod 700 /scratch/enroot-sifal.klioui/notes')
-    for sample in tqdm(notes['text']):
-        sample = sample.replace('\n', '')
-        text_data.append(sample)
-        if len(text_data) == 10_000:
-            # once we hit the 10K mark, save to file
-            with open(f'/scratch/enroot-sifal.klioui/notes/chunck_{file_count}.txt', 'w', encoding='utf-8') as fp:
+    if not os.path.exists('/scratch/sifal.klioui/notes/train'):
+        os.makedirs('/scratch/sifal.klioui/notes/train', mode =0o700, exist_ok = True)
+        os.makedirs('/scratch/sifal.klioui/notes/test', mode =0o700, exist_ok = True)
+        
+    for i, chunk in enumerate(notes_reader):
+        text_data.extend(text_preprocessor(chunk)['text'].tolist())
+        if i < 30:
+            with open(f'/scratch/sifal.klioui/notes/train/chunck_{i}.txt', 'w', encoding='utf-8') as fp:
                 fp.write('\n'.join(text_data))
-            text_data = []
-            file_count += 1
-    # after saving in 10K chunks, we will have ~2082 leftover samples, we save those now too
-    with open(f'/scratch/enroot-sifal.klioui/notes/chunck_{file_count}.txt', 'w', encoding='utf-8') as fp:
-        fp.write('\n'.join(text_data))
+        else:
+            with open(f'/scratch/sifal.klioui/notes/test/chunck_{i}.txt', 'w', encoding='utf-8') as fp:
+                fp.write('\n'.join(text_data))
+        text_data = []
 
 
+def tokenize_function(examples, tokenizer):
+        # Remove empty lines
+        examples['text'] = [
+            line for line in examples['text'] if len(line) > 0 and not line.isspace()
+        ]
+        return tokenizer(
+            examples['text'],
+            padding=False,
+            truncation=True,
+            max_length=128, # the sequence lenght with which the model was pretrained
+            # We use this option because DataCollatorForLanguageModeling (see below) is more efficient when it
+            # receives the `special_tokens_mask`.
+            return_special_tokens_mask=True,
+        )
