@@ -185,3 +185,19 @@ def make_chunks(notes_path: str, text_preprocessor : TextPreprocessor, chunk_siz
             with open(f'/scratch/sifal.klioui/notes/test/chunck_{i}.txt', 'w', encoding='utf-8') as fp:
                 fp.write('\n'.join(text_data))
         text_data = []
+
+
+def tokenize_function(examples, tokenizer):
+        # Remove empty lines
+        examples['text'] = [
+            line for line in examples['text'] if len(line) > 0 and not line.isspace()
+        ]
+        return tokenizer(
+            examples['text'],
+            padding=False,
+            truncation=True,
+            max_length=128, # the sequence lenght with which the model was pretrained
+            # We use this option because DataCollatorForLanguageModeling (see below) is more efficient when it
+            # receives the `special_tokens_mask`.
+            return_special_tokens_mask=True,
+        )
