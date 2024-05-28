@@ -187,7 +187,7 @@ def make_chunks(notes_path: str, text_preprocessor : TextPreprocessor, chunk_siz
         text_data = []
 
 
-def tokenize_function(examples, tokenizer):
+def _tokenize_function(examples, tokenizer):
         # Remove empty lines
         examples['text'] = [
             line for line in examples['text'] if len(line) > 0 and not line.isspace()
@@ -201,3 +201,23 @@ def tokenize_function(examples, tokenizer):
             # receives the `special_tokens_mask`.
             return_special_tokens_mask=True,
         )
+
+
+def preprocess_logits_for_metrics(logits, labels):
+        if isinstance(logits, tuple):
+            # Depending on the model and config, logits may contain extra tensors,
+            # like past_key_values, but logits always come first
+            logits = logits[0]
+        return logits.argmax(dim=-1)
+
+
+def _compute_metrics(eval_preds, metric):
+            preds, labels = eval_preds
+            # preds have the same shape as the labels, after the argmax(-1) has been calculated
+            # by preprocess_logits_for_metrics
+            labels = labels.reshape(-1)
+            preds = preds.reshape(-1)
+            mask = labels != -100
+            labels = labels[mask]
+            preds = preds[mask]
+            return metric.compute(predictions=preds, references=labels)
