@@ -211,7 +211,7 @@ def preprocess_logits_for_metrics(logits, labels):
         return logits.argmax(dim=-1)
 
 
-def _compute_metrics(eval_preds, metric):
+def prepare_sequences(eval_preds):
             preds, labels = eval_preds
             # preds have the same shape as the labels, after the argmax(-1) has been calculated
             # by preprocess_logits_for_metrics
@@ -220,4 +220,4 @@ def _compute_metrics(eval_preds, metric):
             mask = labels != -100
             labels = labels[mask]
             preds = preds[mask]
-            return metric.compute(predictions=preds, references=labels)
+            return preds, labels
