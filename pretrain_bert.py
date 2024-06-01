@@ -49,13 +49,13 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Finetune a transformers model on a Masked Language Modeling task")
 
     parser.add_argument("--debug", action='store_true', help="Whether to run the model in debug mode.")
-    parser.add_argument("--output_dir", type=str, default='./bert_mimic_model', help="Where to store the final model.")
+    parser.add_argument("--output_dir", type=str, default='./bert_mimic_model_512', help="Where to store the final model.")
     parser.add_argument("--seed", type=int, default=314159, help="A seed for reproducible training.")
 
     parser.add_argument(
         "--gradient_accumulation_steps",
         type=int,
-        default=1,
+        default=4,
         help="Number of updates steps to accumulate before performing a backward/update pass.",
     )
 
@@ -65,7 +65,7 @@ def parse_args():
     parser.add_argument(
             "--max_seq_length",
             type=int,
-            default=128,
+            default=512,
             help="The maximum total input sequence length after tokenization. Sequences longer than this will be truncated."
 
         )
@@ -104,21 +104,21 @@ def parse_args():
     parser.add_argument(
         "--preprocessing_num_workers",
         type=int,
-        default=24,
+        default=25,
         help="The number of processes to use for the preprocessing.",
     )
 
     parser.add_argument(
         "--model_name_or_path",
         type=str,
-        default='mosaicml/mosaic-bert-base',
+        default='mosaicml/mosaic-bert-base-seqlen-512',
         help="Path to pretrained model or model identifier from huggingface.co/models.",
     )
 
     parser.add_argument(
         "--config_name",
         type=str,
-        default='mosaicml/mosaic-bert-base',
+        default='mosaicml/mosaic-bert-base-seqlen-512',
         help="Pretrained config name or path if not the same as model_name",
     )
 
@@ -132,18 +132,27 @@ def parse_args():
     parser.add_argument(
         "--overwrite_cache", action="store_true", help="Overwrite the cached training and evaluation sets"
     )
+    parser.add_argument("--train_file",
+                         type=str,
+                         default='/scratch/sifal.klioui/notes_v2/notes.txt',
+                         help="A text file containing the training data.")
+        
+    parser.add_argument("--validation_file", type=str, default=None, help="A text file containing the validation data.")
+
+    parser.add_argument("--validation_split_percentage", type=int, default=5, help="The percentage of the train set to use as validation set.")
+
 
     parser.add_argument(
         "--per_device_train_batch_size",
         type=int,
-        default=176,
+        default=32,
         help="Batch size (per device) for the training dataloader.",
     )
 
     parser.add_argument(
         "--per_device_eval_batch_size",
         type=int,
-        default=256,
+        default=96,
         help="Batch size (per device) for the evaluation dataloader.",
     )
 
@@ -340,12 +349,30 @@ def main():
     recall = evaluate.load("recall")
 
     
-    raw_datasets = load_dataset(path = args.data_dir,
-                                data_files={"train": os.path.join(args.data_dir,'train/*.txt'),
-                                            "validation":os.path.join(args.data_dir,'validation/*.txt')},
-                                cache_dir = args.cache_dir)
+    data_files = {}
+    if args.train_file is not None:
+        data_files["train"] = args.train_file
+        extension = args.train_file.split(".")[-1]
+    if args.validation_file is not None:
+        data_files["validation"] = args.validation_file
+        extension = args.validation_file.split(".")[-1]
+    if extension == "txt":
+        extension = "text"
+    raw_datasets = load_dataset(extension, data_files=data_files)
 
-
+    # If no validation data is there, validation_split_percentage will be used to divide the dataset.
+    if "validation" not in raw_datasets.keys():
+        raw_datasets["validation"] = load_dataset(
+            extension,
+            data_files=data_files,
+            split=f"train[:{args.validation_split_percentage}%]",
+        )
+        raw_datasets["train"] = load_dataset(
+            extension,
+            data_files=data_files,
+            split=f"train[{args.validation_split_percentage}%:]",
+        )
+    
     config = BertConfig.from_pretrained(args.config_name, trust_remote_code=args.trust_remote_code)
     
     tokenizer = BertTokenizer.from_pretrained(
@@ -353,38 +380,61 @@ def main():
 
     model = AutoModelForMaskedLM.from_pretrained(args.model_name_or_path, trust_remote_code = True, config = config, cache_dir = args.cache_dir)
 
+    column_names = raw_datasets["train"].column_names
+    text_column_name = "text" if "text" in column_names else column_names[0]
 
     def tokenize_function(examples):
-        
-        # Remove empty lines
-        examples['text'] = [
-            line for line in examples['text'] if len(line) > 0 and not line.isspace()
-        ]
-        return tokenizer(
-            examples['text'],
-            padding=False,
-            truncation=True,
-            max_length=128, # the sequence lenght with which the model was pretrained
-        
-            return_special_tokens_mask=True, # We use this option because DataCollatorForLanguageModeling (see below) is more efficient when it
-            # receives the `special_tokens_mask`.
-        )
+        return tokenizer(examples[text_column_name], return_special_tokens_mask=True)
 
     with accelerator.main_process_first():
-            tokenized_datasets = raw_datasets.map(
-                tokenize_function,
-                batched=True,
-                num_proc=args.preprocessing_num_workers,
-                remove_columns=['text'],
-                load_from_cache_file= not args.overwrite_cache,
-                desc="Running tokenizer on dataset line_by_line",
-            )
+        tokenized_datasets = raw_datasets.map(
+            tokenize_function,
+            batched=True,
+            num_proc=args.preprocessing_num_workers,
+            remove_columns=column_names,
+            load_from_cache_file= not args.overwrite_cache,
+            desc="Running tokenizer on every text in dataset",
+        )
+
+    max_seq_length = min(args.max_seq_length, tokenizer.model_max_length)
+
+    # Main data processing function that will concatenate all texts from our dataset and generate chunks of
+    # max_seq_length.
+    def group_texts(examples):
+        # Concatenate all texts.
+        concatenated_examples = {k: list(chain(*examples[k])) for k in examples.keys()}
+        total_length = len(concatenated_examples[list(examples.keys())[0]])
+        # We drop the small remainder, and if the total_length < max_seq_length  we exclude this batch and return an empty dict.
+        # We could add padding if the model supported it instead of this drop, you can customize this part to your needs.
+        total_length = (total_length // max_seq_length) * max_seq_length
+        # Split by chunks of max_len.
+        result = {
+            k: [t[i : i + max_seq_length] for i in range(0, total_length, max_seq_length)]
+            for k, t in concatenated_examples.items()
+        }
+        return result
+
+    # Note that with `batched=True`, this map processes 1,000 texts together, so group_texts throws away a
+    # remainder for each of those groups of 1,000 texts. You can adjust that batch_size here but a higher value
+    # might be slower to preprocess.
+    #
+    # To speed up this part, we use multiprocessing. See the documentation of the map method for more information:
+    # https://huggingface.co/docs/datasets/process#map
+
+    with accelerator.main_process_first():
+        tokenized_datasets = tokenized_datasets.map(
+            group_texts,
+            batched=True,
+            num_proc=args.preprocessing_num_workers,
+            load_from_cache_file = not args.overwrite_cache,
+            desc=f"Grouping texts in chunks of {max_seq_length}",
+        )
         
     train_dataset = tokenized_datasets["train"]
     eval_dataset = tokenized_datasets["validation"]
 
     if args.debug:
-        train_dataset = train_dataset.select(range(len(train_dataset)//50))
+        train_dataset = train_dataset.select(range(len(train_dataset)//10_000))
         eval_dataset = eval_dataset.select(range(len(eval_dataset)//50))
 
     # Conditional for small test subsets
@@ -398,9 +448,9 @@ def main():
 
     # DataLoaders creation:
     train_dataloader = DataLoader(
-        train_dataset, shuffle=True, collate_fn=data_collator, batch_size=args.per_device_train_batch_size
+        train_dataset, pin_memory=True, shuffle=True, collate_fn=data_collator, batch_size=args.per_device_train_batch_size
     )
-    eval_dataloader = DataLoader(eval_dataset, collate_fn=data_collator, batch_size=args.per_device_eval_batch_size)
+    eval_dataloader = DataLoader(eval_dataset,pin_memory=True, collate_fn=data_collator, batch_size=args.per_device_eval_batch_size)
 
     no_decay = ["bias", "LayerNorm.weight"]
 
@@ -468,7 +518,7 @@ def main():
         experiment_config = vars(args)
         # TensorBoard cannot log Enums, need the raw value
         experiment_config["lr_scheduler_type"] = experiment_config["lr_scheduler_type"].value
-        accelerator.init_trackers("mlm_no_trainer", experiment_config)
+        accelerator.init_trackers("mosaic_bert_512", experiment_config)
 
 
     total_batch_size = args.per_device_train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
