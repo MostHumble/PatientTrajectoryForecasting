@@ -600,7 +600,7 @@ def main():
                     output_dir = f"step_{completed_steps}"
                     if args.output_dir is not None:
                         output_dir = os.path.join(args.output_dir, output_dir)
-                    accelerator.save_state(output_dir)
+                    accelerator.save_state(output_dir, safe_serialization = False)
 
             if completed_steps >= args.max_train_steps:
                 break
@@ -686,7 +686,7 @@ def main():
             output_dir = f"epoch_{epoch}"
             if args.output_dir is not None:
                 output_dir = os.path.join(args.output_dir, output_dir)
-            accelerator.save_state(output_dir)
+            accelerator.save_state(output_dir, safe_serialization = False)
         
     if args.with_tracking:
         accelerator.end_training()
