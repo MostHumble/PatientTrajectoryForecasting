@@ -115,6 +115,7 @@ if __name__ == '__main__':
     notes['ind'] = list(range(len(notes.index)))
 
     pandarallel.initialize(progress_bar=True)
+    # usefull if have a lot cpu cores, otherwise look into RAPIDS cuDF (pandas on gpu! :O ) 
     formatted_notes = notes.parallel_apply(process_note, axis=1)
 
     text_preprocessor = TextPreprocessor(clean_text=args.clean_text,
@@ -128,10 +129,23 @@ if __name__ == '__main__':
                                          apply_replace=args.apply_replace,
                                          remove_adm_details=args.remove_adm_details)
     
-    formatted_notes = notes.parallel_apply(text_preprocessor, axis=1)
+    with open(os.path.join(args.output_dir,'notes.txt'),'w') as f:
+
+        for text in formatted_notes['text']:
+            try:
+                text = text_preprocessor(text)
+            except TypeError as e:
+            # doing this because found some nan values in the notes
+                if str(e) == "expected string or bytes-like object" and type(text) == float:
+                    continue
+                else:
+                    raise         
+                    
+            if text != None and len(text) != 0 :
+                f.write(text)
+                f.write('\n')
+    
 
     end = time.time()
 
     print('Time taken to process notes: %f seconds' %(end-start))
-
-    formatted_notes.to_csv(os.path.join(args.output_dir, 'formatted_notes.csv'), index=False)

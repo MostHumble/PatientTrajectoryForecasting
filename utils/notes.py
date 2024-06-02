@@ -2,8 +2,6 @@ import pandas
 from tqdm.auto import tqdm 
 import os
 import re 
-import re
-import os
 
 class TextPreprocessor:
     def __init__(
@@ -109,42 +107,36 @@ class TextPreprocessor:
                 ,['prn', 'as needed.']
                 ,['PRN', 'as needed.']]
 
-    def __call__(self, df: pandas.DataFrame) -> pandas.DataFrame:
+    def __call__(self, note: str) -> str:
 
         if self.clean_text:
-            df['text'] = df['text'].apply(lambda x: self.clean(x))
+            note =  self.clean(note)
         if self.apply_replace:
-            df['text'] = df['text'].apply(lambda x: self.apply_replace_list(x))
+            note = self.apply_replace_list(note)
         if self.lower:
-            df['text'] = df['text'].str.lower()
+            note = note.lower()
         if self.convert_danish_characters:
-            df['text'] = df['text'].str.replace("å", "aa", regex=True)
-            df['text'] = df['text'].str.replace("æ", "ae", regex=True)
-            df['text'] = df['text'].str.replace("ø", "oe", regex=True)
+            # use regex instead of str.replace to avoid replacing characters in the middle of words
+            note = re.sub(r'å', 'aa', note)
+            note = re.sub(r'æ', 'ae', note)
+            note = re.sub(r'ø', 'oe', note)
         if self.remove_accents:
-            df['text'] = df['text'].str.replace("é|è|ê", "e", regex=True)
-            df['text'] = df['text'].str.replace("á|à|â", "a", regex=True)
-            df['text'] = df['text'].str.replace("ô|ó|ò", "o", regex=True)
+            note = re.sub(r'é|è|ê', "e", note)
+            note = re.sub(r'á|à|â', "a", note)
+            note = re.sub(r'ô|ó|ò', "o", note)
         if self.remove_brackets:
-            df['text'] = df['text'].str.replace("\[[^]]*\]", "", regex=True)
+            note = re.sub("\[|\]", "", note)
         if self.remove_special_characters:
-            df['text'] = df['text'].str.replace("\n|/|-", " ", regex=True)
-            df['text'] = df['text'].str.replace(
-                "[^a-zA-Z0-9 ]", "", regex=True
-            )
+            note = re.sub("[^a-zA-Z0-9 ]", "", note)
+            note = re.sub("\n|/|-", " ", note)
         if self.remove_special_characters_mullenbach:
-            df['text'] = df['text'].str.replace(
-                "[^A-Za-z0-9]+", " ", regex=True
-            )
+            note = re.sub("[^A-Za-z0-9]+", " ", note)
         if self.remove_digits:
-            df['text'] = df['text'].str.replace("(\s\d+)+\s", " ", regex=True)
+            note = note.replace("\d+", "", regex=True)
         if self.remove_adm_details:
-            df['text'] = df['text'].str.replace(
-                "admission date:|discharge date:|date of birth:|addendum:|--|__|==", "", regex=True
-            )
-                
-        df['text'] = df['text'].str.strip()
-        return df
+            note = re.sub("admission date:|discharge date:|date of birth:|addendum:|--|__|==", "", note)                
+        note = note.strip()
+        return note
     
     def apply_replace_list(self, x : str) -> str:
         """
