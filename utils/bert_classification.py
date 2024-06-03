@@ -6,14 +6,15 @@ from transformers import BertPreTrainedModel
 from transformers.modeling_outputs import SequenceClassifierOutput
 from torch.nn.modules.utils import consume_prefix_in_state_dict_if_present
 import logging
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+
 
 logger = logging.getLogger(__name__)
 
-class BertForSequenceClassification(BertPreTrainedModel):
+class MosaicBertForSequenceClassification(BertPreTrainedModel):
     """Bert Model transformer with a sequence classification/regression head.
 
-    This head is just a linear layer on top of the pooled output. Used for,
-    e.g., GLUE tasks.
+    This head is just a linear layer on top of the pooled output.
     """
 
     def __init__(self, config):
@@ -29,6 +30,7 @@ class BertForSequenceClassification(BertPreTrainedModel):
 
        # this resets the weights
         self.post_init()
+
 
     @classmethod
     def from_pretrained(cls,
@@ -77,12 +79,6 @@ class BertForSequenceClassification(BertPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], SequenceClassifierOutput]:
-        # labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-        # Labels for computing the sequence classification/regression loss.
-        # Indices should be in `[0, ..., config.num_labels - 1]`.
-        # If `config.num_labels == 1` a regression loss is computed
-        # (mean-square loss). If `config.num_labels > 1` a classification loss
-        # is computed (cross-entropy).
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -105,30 +101,26 @@ class BertForSequenceClassification(BertPreTrainedModel):
 
         loss = None
         if labels is not None:
-            # Compute loss
             if self.config.problem_type is None:
                 if self.num_labels == 1:
-                    self.config.problem_type = 'regression'
-                elif self.num_labels > 1 and (labels.dtype == torch.long or
-                                              labels.dtype == torch.int):
-                    self.config.problem_type = 'single_label_classification'
+                    self.config.problem_type = "regression"
+                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                    self.config.problem_type = "single_label_classification"
                 else:
-                    self.config.problem_type = 'multi_label_classification'
+                    self.config.problem_type = "multi_label_classification"
 
-            if self.config.problem_type == 'regression':
-                loss_fct = nn.MSELoss()
+            if self.config.problem_type == "regression":
+                loss_fct = MSELoss()
                 if self.num_labels == 1:
                     loss = loss_fct(logits.squeeze(), labels.squeeze())
                 else:
                     loss = loss_fct(logits, labels)
-            elif self.config.problem_type == 'single_label_classification':
-                loss_fct = nn.CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels),
-                                labels.view(-1))
-            elif self.config.problem_type == 'multi_label_classification':
-                loss_fct = nn.BCEWithLogitsLoss()
+            elif self.config.problem_type == "single_label_classification":
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            elif self.config.problem_type == "multi_label_classification":
+                loss_fct = BCEWithLogitsLoss()
                 loss = loss_fct(logits, labels)
-
         if not return_dict:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
@@ -137,5 +129,4 @@ class BertForSequenceClassification(BertPreTrainedModel):
             loss=loss,
             logits=logits,
             hidden_states=None,
-            attentions=None,
-        )
+            attentions=None,)
