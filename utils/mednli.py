@@ -1,6 +1,9 @@
 from tqdm import tqdm
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 import torch 
+import json
+from datasets import Dataset
+from torch.utils.data import Dataset as tDataset
 
 def compute_metrics(preds, labels):
     precision, recall, f1, _ = precision_recall_fscore_support(labels, 
@@ -44,5 +47,38 @@ def evaluate_model(model, dataloader, device, criterion):
             #r_scheduler.step()
             # Update progress bar
             sum_loss += loss.item()
-        print(f'average epoch loss = {sum_loss/len(dataloader)}')
-    return compute_metrics(preds_list, labels_list)
+    return compute_metrics(preds_list, labels_list), sum_loss / len(dataloader)
+
+
+# Load the MedNLI dataset
+def load_mednli(file_path):
+    with open(file_path, 'r') as f:
+        lines = f.readlines()
+    data = [json.loads(line) for line in lines]
+    return data
+
+
+# Convert to Hugging Face datasets
+def convert_to_dataset(data):
+    return Dataset.from_dict({
+        'premise': [item['sentence1'] for item in data],
+        'hypothesis': [item['sentence2'] for item in data],
+        'label': [0 if item['gold_label'] == 'entailment' else 1 if item['gold_label'] == 'contradiction' else 2 for item in data]
+    })
+
+
+class NLIDataset(tDataset):
+    def __init__(self, dataset):
+        self.dataset = dataset
+    
+    def __len__(self):
+        return len(self.dataset)
+    
+    def __getitem__(self, idx):
+        item = self.dataset[idx]
+        return {
+            'input_ids': torch.tensor(item['input_ids']),
+            'token_type_ids': torch.tensor(item['token_type_ids']),
+            'attention_mask': torch.tensor(item['attention_mask']),
+            'labels': torch.tensor(item['label'])
+        }

@@ -658,7 +658,11 @@ def filter_notes(notes : pd.DataFrame, subject_id_adm_map : Dict[int, List[int]]
             subject_id_adm_map_[subject_id] = hadm_ids
         else:
             temp_hadm_ids = list(takewhile(lambda x: x in set(temp_df.index), hadm_ids))
-
+            try:
+                # add one more visit, which will be the last one, as we do not feed the notes to the decoder.
+                temp_hadm_ids.append(hadm_ids[len(temp_hadm_ids)])
+            except IndexError:
+                pass
             if len(temp_hadm_ids) > min_visits:
                 subject_id_adm_map_[subject_id] = temp_hadm_ids
                 filtered_rows.extend(temp_hadm_ids)

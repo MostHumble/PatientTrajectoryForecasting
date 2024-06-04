@@ -48,10 +48,7 @@ import utils.bert_padding as bert_padding_module
 import torch
 import torch.nn as nn
 from einops import rearrange
-from torch.nn.modules.utils import consume_prefix_in_state_dict_if_present
 from transformers.activations import ACT2FN
-from transformers.modeling_outputs import (MaskedLMOutput,
-                                           SequenceClassifierOutput)
 from transformers.models.bert.modeling_bert import BertPreTrainedModel
 
 try:
