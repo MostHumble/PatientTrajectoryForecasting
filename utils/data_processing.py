@@ -39,6 +39,7 @@ def get_hadm_ids_for_strategy(subject_id_hadm_map, strategy = 'SDP'):
                 notes_hadm_ids.extend([hadm_list[:i+1]])
     elif strategy == 'TF':
         raise NotImplementedError
+    return notes_hadm_ids
 
 def prepare_for_sdp(sequence: List[List[int]]):
     """
