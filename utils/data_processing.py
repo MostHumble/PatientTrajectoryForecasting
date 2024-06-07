@@ -21,15 +21,24 @@ def prepare_for_tf(sequence : List[List[int]]) -> Tuple[List[List[int]]]:
         List[Tuple[List[List[int]], List[List[int]]]]: A list of pairs, where each pair consists of an input sequence and its corresponding output sequence.
     """
     X, y, pairs = list(), list(), list()
-    for i in range(len(sequence)):
-        # find the end of this pattern
-        if i+1 >= len(sequence):
-            break
+    for i in range(len(sequence) - 1):
         X.append(sequence[:i+1])
         y.append(sequence[i+1:])
+
     pairs = list_tuples(X, y)
     return pairs
 
+def get_hadm_ids_for_strategy(subject_id_hadm_map, strategy = 'SDP'):
+    """
+    Get the hospital admission ids for the specified strategy.
+    """
+    notes_hadm_ids = []
+    if strategy == 'SDP':
+        for hadm_list in subject_id_hadm_map.values():
+            for i in range(len(hadm_list)-1):
+                notes_hadm_ids.extend([hadm_list[:i+1]])
+    elif strategy == 'TF':
+        raise NotImplementedError
 
 def prepare_for_sdp(sequence: List[List[int]]):
     """
@@ -44,14 +53,14 @@ def prepare_for_sdp(sequence: List[List[int]]):
     """
     
     X, y, pairs = list(), list(), list()
-    for i in range(len(sequence)):
-        if i + 1 >= len(sequence):
-            break
+    for i in range(len(sequence) - 1):
         X.append(sequence[:i+1])
         y.append([sequence[i+1]])
         
     pairs = list_tuples(X, y)
     return pairs
+
+
 
 def format_data(sequences : List[List[List[int]]],  strategy : Optional[str] = 'TF') -> List[Tuple[List[int], List[int]]]:
     """
@@ -192,8 +201,7 @@ def prepare_sequences(source_target_sequences: List[Tuple[List[int], List[int]]]
     updated_source_sequences = []
     updated_target_sequences = []
 
-    for pair in source_target_sequences:
-        input_sequences, output_sequences = pair
+    for input_sequences, output_sequences in source_target_sequences:
         input_sequence_spec, output_sequence_spec = [], []
         # Adding special tokens to input sequence
         for input_sequence in input_sequences:
