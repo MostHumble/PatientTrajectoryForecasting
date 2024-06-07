@@ -5,6 +5,7 @@ import pandas as pd
 from collections import defaultdict, Counter
 from typing import Dict, Optional, Tuple, List, Set
 from itertools import takewhile, chain
+from concurrent.futures import ThreadPoolExecutor
 import statistics
 import asyncio
 
@@ -573,7 +574,9 @@ def icd_mapping(CCSRDX_file: str, CCSRPCS_file: str, CCSDX_file: str, CCSPX_file
     codeDescription['EOV'] = 'End of visit'
     codeDescription['BOS'] = 'Beginning of sequence'
     codeDescription['PAD'] = 'Padding'
+
     display_code_stats(adDx,adPx,adDrug)
+
     return adDx,adPx,codeDescription, missingPxCodes, missingDxCodes
 
 
@@ -634,7 +637,7 @@ def filter_subjects(subject_id_adm_map : Dict[int, List[int]], min_visits: int =
 def filter_notes(notes : pd.DataFrame, subject_id_adm_map : Dict[int, List[int]],
                   min_visits: int = 2) -> Tuple[pd.DataFrame, Dict[int, List[int]]]:
     """
-    Filters the notes dataframe based on the given subject_id_hadm_id_map and minimum number of visits.
+    Filters the notes dataframe based on the given subject_id_hadm_id_map and a minimum number of visits.
 
     Args:
         notes (pandas.DataFrame): The dataframe containing the notes.
@@ -648,13 +651,11 @@ def filter_notes(notes : pd.DataFrame, subject_id_adm_map : Dict[int, List[int]]
     """
     print(f'filtering notes where the subject has made less than {min_visits} successive visits...')
     subject_id_adm_map_ = {}
-    filtered_rows = []
     subjects_to_rm = 0
     visits_to_rm = 0
     for subject_id, hadm_ids in subject_id_adm_map.items():
         temp_df = notes[notes['subject_id'] == subject_id]
         if set(temp_df.index).issuperset(set(hadm_ids)):
-            filtered_rows.extend(hadm_ids)
             subject_id_adm_map_[subject_id] = hadm_ids
         else:
             temp_hadm_ids = list(takewhile(lambda x: x in set(temp_df.index), hadm_ids))
@@ -665,12 +666,11 @@ def filter_notes(notes : pd.DataFrame, subject_id_adm_map : Dict[int, List[int]]
                 pass
             if len(temp_hadm_ids) > min_visits:
                 subject_id_adm_map_[subject_id] = temp_hadm_ids
-                filtered_rows.extend(temp_hadm_ids)
             else:
                 subjects_to_rm += 1
                 visits_to_rm += len(hadm_ids)
     print(f'found {subjects_to_rm} subjects and {visits_to_rm} visits that need to be removed')
-    return notes.loc[filtered_rows], subject_id_adm_map_
+    return subject_id_adm_map_
 
 def build_data(subject_id_adm_map : Dict[int, List[int]], adDx: Dict[int, List[int]],
                 adPx: Dict[int, List[int]],
@@ -721,15 +721,15 @@ def build_data(subject_id_adm_map : Dict[int, List[int]], adDx: Dict[int, List[i
                 new_visit.append(codes_to_ids[code])
             new_patient.append(new_visit)
         new_seqs.append(new_patient)
-    return new_seqs, dict(codes_to_ids)
+    return new_seqs, dict(codes_to_ids),
 
-def remove_code(currentSeqs : List[List[List[int]]], tokens_to_ids, threshold :int = 5) -> Tuple[List[List[List[int]]], Dict[str, int], Dict[int, str]]:
+def remove_code(currentSeqs: List[List[List[int]]], tokens_to_ids: Dict[str, int], threshold: int = 5) -> Tuple[List[List[List[int]]], Dict[str, int], Dict[int, str]]:
     """
     Removes infrequent codes from the given sequences.
 
     Args:
         currentSeqs (List[List[List[int]]]): The input sequences containing codes.
-        types (Dict[str, int]): A dictionary mapping code types to their corresponding integer values.
+        tokens_to_ids (Dict[str, int]): A dictionary mapping code types to their corresponding integer values.
         threshold (int, optional): The threshold value for removing infrequent codes. Codes with a count less than or equal to this threshold will be removed. Defaults to 5.
 
     Returns:
@@ -743,20 +743,26 @@ def remove_code(currentSeqs : List[List[List[int]]], tokens_to_ids, threshold :i
             
     codes = [key for key, value in countCode.items() if value <= threshold]
     
-    print(f" Total number of codes removed: {len(codes)}  ")
-    print(f" Total number of  unique codes : {len(countCode)}  ")
+    print(f"Total number of codes removed: {len(codes)}")
+    print(f"Total number of unique codes: {len(countCode)}")
 
-    ids_to_tokens = {v:k for k,v in tokens_to_ids.items()}
+    ids_to_tokens = {v: k for k, v in tokens_to_ids.items()}
 
-    # List of codes like : D9_660...
-    tokens_to_ids = defaultdict(lambda: len(tokens_to_ids), {"PAD": 0,"BOH":1 ,"BOS": 2, "BOV": 3, "EOV": 4, "EOH": 5})
+    # Recreate a new mapping while taking into consideration the removed tokens
+    tokens_to_ids = defaultdict(lambda: len(tokens_to_ids), {"PAD": 0, "BOH": 1, "BOS": 2, "BOV": 3, "EOV": 4, "EOH": 5})
 
-    # Recreates a new mapping while taking into consideration the removed tokens
-    updatedSeqs = [[[tokens_to_ids[ids_to_tokens[code]] for code in visit if code not in codes] for visit in patient] for patient in currentSeqs]
-    
-    ids_to_tokens = {v:k for k,v in tokens_to_ids.items()}
+    def process_patient(patient: List[List[int]]) -> List[List[int]]:
+        return [[tokens_to_ids[ids_to_tokens[code]] for code in visit if code not in codes] for visit in patient]
+
+    with ThreadPoolExecutor() as executor:
+        updatedSeqs = list(executor.map(process_patient, currentSeqs))
+
+    ids_to_tokens = {v: k for k, v in tokens_to_ids.items()}
 
     return updatedSeqs, dict(tokens_to_ids), ids_to_tokens
+
+
+    # List of codes like : D9_660...
 
 def generate_code_types(reverseTypes: Dict[int, str], outFile : str = 'outputData/originalData/') -> Dict[str, int] :
     """
@@ -806,14 +812,20 @@ def generate_code_types(reverseTypes: Dict[int, str], outFile : str = 'outputDat
 
     return codeType
 
-def save_files(patients_visits_sequences : List[List[List[int]]], types : Dict[str, int], codeDescription : Dict[str, str], outFile : str = 'outputData/originalData/'):
+def save_files(patients_visits_sequences : List[List[List[int]]],
+                tokens_ids_map : Dict[str, int],
+                  ids_to_types : Dict[str, str],
+                    subject_id_hadm_map: Optional[Dict[int,List[int]]] = None,
+                    outFile : str = 'outputData/originalData/'):
     """
-    Save the updated sequences, types, and code description to files.
+    Save the patients_visits_sequences, tokens_ids_map,
+    code description, and subject id to admissions list mapping to the output directory.
 
     Args:
     updatedSeqs (List[List[List[int]]]): The updated sequences to be saved.
-    types: The types to be saved.
+    tokens_ids_map: The types to be saved.
     codeDescription (str): The code description to be saved.
+    subject_id_hadm_map (dict, optional): The subject ID to admission ID mapping. Defaults to None.
     outpath (str, optional): The output path where the files will be saved. Defaults to 'outputData/originalData/'.
     """
 
@@ -821,5 +833,7 @@ def save_files(patients_visits_sequences : List[List[List[int]]], types : Dict[s
         os.makedirs(outFile)
     
     pickle.dump(patients_visits_sequences, open(outFile + 'patients_visits_sequences.pkl', 'wb'), -1)
-    pickle.dump(types, open(outFile + 'tokens_to_ids.pkl', 'wb'), -1)
-    pickle.dump(codeDescription, open(outFile + 'code_description.pkl', 'wb'), -1)
+    pickle.dump(tokens_ids_map, open(outFile + 'tokens_to_ids.pkl', 'wb'), -1)
+    pickle.dump(ids_to_types, open(outFile + 'ids_to_types.pkl', 'wb'), -1)
+    if subject_id_hadm_map:
+        pickle.dump(subject_id_hadm_map, open(outFile + 'subject_id_hadm_map.pkl', 'wb'), -1)
