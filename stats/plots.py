@@ -3,14 +3,64 @@ from collections import Counter
 from matplotlib.ticker import MaxNLocator
 import numpy as np
 
-def plot_admission_distribution(subject_id_adm_map, num_visits = 15, save = False, dpi = 600, prefix :str = '', title :str = ''):
-    # Count the number of admissions per subject
+
+def get_admission_stats(subject_id_adm_map, num_visits=15):
+   # Count the number of admissions per subject
     num_admissions_less = [len(admissions) for admissions in subject_id_adm_map.values() if len(admissions) < num_visits]
     num_admissions_more = [len(admissions) for admissions in subject_id_adm_map.values() if len(admissions) > num_visits]
     
     counts_less = dict(Counter(num_admissions_less))
     counts_more = dict(Counter(num_admissions_more))
     counts_more_sorted = sorted(counts_more.items())
+
+    x, y = zip(*counts_more_sorted)
+    cumulative = [sum(y[:i+1]) for i in range(len(y))]
+    
+    return counts_less, (x, cumulative)
+
+
+def plot_all_distributions(steps_data, num_visits=15, save=False, dpi=600, prefix=''):
+    fig, axs = plt.subplots(2, 1, figsize=(20, 16))
+
+    colors = ['#1f77b4', '#ff7f0e', '#2ca02c']
+    
+    # Plot the first distribution
+    for i, (step, (counts_less, _)) in enumerate(steps_data.items()):
+        color = colors[i % len(colors)]
+        axs[0].bar(counts_less.keys(), counts_less.values(), color=color, alpha=0.5, label=step)
+    
+    axs[0].set_xlabel('Number of visits')
+    axs[0].set_ylabel('Number of Subjects')
+    axs[0].set_title(f'Distribution of Number of Subjects per Number of Visits (< {num_visits})')
+    axs[0].set_xlim(0, num_visits)
+    axs[0].set_xticks(range(1, num_visits))
+    axs[0].legend()
+    
+    for step, (counts_less, _) in steps_data.items():
+        for x, y in counts_less.items():
+            axs[0].text(x, y, str(y), ha='center', va='bottom')
+
+    # Plot the second distribution
+    for i, (step, (_, (x, cumulative))) in enumerate(steps_data.items()):
+        color = colors[i % len(colors)]
+        axs[1].plot(x, cumulative, marker='o', linestyle='-', color=color, alpha=0.5, label=step)
+    
+    axs[1].set_xlabel('Number of visits')
+    axs[1].set_ylabel('Number of Subjects')
+    axs[1].set_title(f'Cumulative Distribution of Number of Subjects per Number of Visits (> {num_visits})')
+    axs[1].yaxis.set_major_locator(MaxNLocator(integer=True))
+    axs[1].legend()
+
+    plt.tight_layout()
+          
+    if save:
+        plt.savefig(f'./stats/figures/distribution_subject_num_visits_combined_{prefix}.png', dpi=dpi)
+    plt.show()
+
+
+def plot_admission_distribution(subject_id_adm_map, num_visits = 15, save = False, dpi = 600, prefix :str = '', title :str = ''):
+    # Count the number of admissions per subject
+    counts_less, (x, cumulative) = get_admission_stats(subject_id_adm_map, num_visits)
 
     fig, axs = plt.subplots(1, 2, figsize = (20, 8))
 
@@ -24,13 +74,10 @@ def plot_admission_distribution(subject_id_adm_map, num_visits = 15, save = Fals
     axs[0].set_xticks(range(1, num_visits))
     axs[0].set_yticks([])
 
-    for x, y in counts_less.items():
-        axs[0].text(x, y, str(y), ha = 'center', va = 'bottom')
+    for i, j in counts_less.items():
+        axs[0].text(i, j, str(j), ha = 'center', va = 'bottom')
 
-    # Plot the second distribution
-    x, y = zip(*counts_more_sorted)
-    cumulative = [sum(y[:i+1]) for i in range(len(y))]
-    
+    # Plot the second distribution    
     axs[1].set_xlabel('Number of visits')
     axs[1].set_ylabel('Number of Subjects')
     axs[1].set_title(f'Cumulative distribution of Number of Subject per Number of Visits (> {num_visits} )')
