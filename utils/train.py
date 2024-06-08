@@ -11,7 +11,7 @@ import numpy as np
 import yaml
 import os
 
-def train_test_val_split(source_sequences : List[List[int]], target_sequences : List[List[int]],
+def train_test_val_split(source_sequences : List[List[int]], target_sequences : List[List[int]], hospital_ids_source : List[int] = None,
                 test_size : float = 0.05, valid_size : float = 0.05, random_state = None)\
     -> Tuple[Tuple[List[int], List[int]], Tuple[List[int], List[int]], Tuple[List[int], List[int]]]:
     """
@@ -48,9 +48,14 @@ def train_test_val_split(source_sequences : List[List[int]], target_sequences : 
     valid_idx = idx[nTest:nTest+nValid]
     train_idx = idx[nTest+nValid:]
 
-    train = {'source_sequences': source_sequences[train_idx], 'target_sequences' : target_sequences[train_idx]}
-    test = {'source_sequences': source_sequences[test_idx],  'target_sequences' : target_sequences[test_idx]}
-    valid = {'source_sequences':  source_sequences[valid_idx], 'target_sequences' : target_sequences[valid_idx]}
+    if hospital_ids_source is not None:
+        train = {'source_sequences': source_sequences[train_idx], 'target_sequences' : target_sequences[train_idx], 'hospital_ids' : [hospital_ids_source[idx] for idx in train_idx]}
+        test = {'source_sequences': source_sequences[test_idx],  'target_sequences' : target_sequences[test_idx], 'hospital_ids' : [hospital_ids_source[idx] for idx in test_idx]}
+        valid = {'source_sequences':  source_sequences[valid_idx], 'target_sequences' : target_sequences[valid_idx], 'hospital_ids' : [hospital_ids_source[idx] for idx in valid_idx]}
+    else:
+        train = {'source_sequences': source_sequences[train_idx], 'target_sequences' : target_sequences[train_idx]}
+        test = {'source_sequences': source_sequences[test_idx],  'target_sequences' : target_sequences[test_idx]}
+        valid = {'source_sequences':  source_sequences[valid_idx], 'target_sequences' : target_sequences[valid_idx]}
     
     return (train, test, valid)
     
@@ -174,7 +179,7 @@ def get_gpu_memory(empty_cache : bool = False):
 class patientTrajectoryForcastingDataset(Dataset):
     """patientTrajectoryForcastingDataset"""
 
-    def __init__(self, source_sequences, target_sequences, **kw):
+    def __init__(self, source_sequences, target_sequences,, **kw):
         """
         Arguments:
             source_sequences (List[List[int]]]): Path to the csv file with annotations.
@@ -189,6 +194,25 @@ class patientTrajectoryForcastingDataset(Dataset):
     def __getitem__(self, idx):
         
         return self.source_sequences[idx], self.target_sequences[idx]
+    
+class patientTrajectoryForcastingDatasetWithNotes(Dataset):
+    """patientTrajectoryForcastingDataset"""
+
+    def __init__(self, source_sequences, target_sequences, hospital_ids,**kw):
+        """
+        Arguments:
+            source_sequences (List[List[int]]]): Path to the csv file with annotations.
+        """
+        self.source_sequences = source_sequences
+        self.target_sequences = target_sequences
+        self.hospital_ids = hospital_ids
+
+    def __len__(self):
+        return len(self.source_sequences)
+
+    def __getitem__(self, idx):
+        
+        return self.source_sequences[idx], self.target_sequences[idx], self.hospital_ids[idx]
 
 def create_source_mask(src, source_pad_id = 0, DEVICE='cuda:0'):
     """
@@ -346,7 +370,7 @@ def evaluate(model, val_dataloader, loss_fn,  source_pad_id = 0, target_pad_id =
 
 def get_data_loaders(train_batch_size=128, eval_batch_size=128, pin_memory=True,
                      seed=213033, test_size=0.05, valid_size=0.05, strategy=None, predict_procedure=None,
-                     predict_drugs=None, **kw):
+                     predict_drugs=None, with_notes = False, **kw):
     """
     Get data loaders for training, validation, and testing.
 
@@ -370,20 +394,25 @@ def get_data_loaders(train_batch_size=128, eval_batch_size=128, pin_memory=True,
     with open('PatientTrajectoryForecasting/paths.yaml', 'r') as file:
         path_config = yaml.safe_load(file)
 
-    train_data_path = get_paths(path_config, strategy, predict_procedure, predict_drugs, train = True, processed_data = True)
+    train_data_path = get_paths(path_config, strategy, predict_procedure, predict_drugs, train = True, processed_data = True, with_notes = with_notes)
 
     #_ , ids_to_types_map, tokens_to_ids_map, __ = load_data(train_data_path['train_data_path'], train = True)
 
-    source_sequences, target_sequences, source_tokens_to_ids, target_tokens_to_ids, ___, ____ = load_data(train_data_path['processed_data_path'], processed_data = True)
+    source_sequences, target_sequences, source_tokens_to_ids, target_tokens_to_ids, _, __, hospital_ids_source = load_data(train_data_path['processed_data_path'], processed_data = True)
 
     embedding_sizes['embedding_size_source'] = ((len(source_tokens_to_ids) + 63) // 64) *64
     embedding_sizes['embedding_size_target'] = ((len(target_tokens_to_ids) + 63) // 64) *64
 
-    train, test, val = train_test_val_split(source_sequences, target_sequences, test_size = test_size, valid_size = valid_size, random_state = seed)
-
-    train_set  = patientTrajectoryForcastingDataset(**train)
-    test_set  = patientTrajectoryForcastingDataset(**test)
-    val_set  = patientTrajectoryForcastingDataset(**val)
+    train, test, val = train_test_val_split(source_sequences, target_sequences, hospital_ids_source = hospital_ids_source, test_size = test_size, valid_size = valid_size, random_state = seed)
+    
+    if with_notes:
+        train_set  = patientTrajectoryForcastingDatasetWithNotes(**train)
+        test_set  = patientTrajectoryForcastingDatasetWithNotes(**test)
+        val_set  = patientTrajectoryForcastingDatasetWithNotes(**val)
+    else:
+        train_set  = patientTrajectoryForcastingDataset(**train)
+        test_set  = patientTrajectoryForcastingDataset(**test)
+        val_set  = patientTrajectoryForcastingDataset(**val)
 
     train_dataloader = DataLoader(train_set, batch_size = train_batch_size, shuffle = True, pin_memory = pin_memory)
     val_dataloader = DataLoader(val_set, batch_size = eval_batch_size, shuffle = False, pin_memory = pin_memory)
