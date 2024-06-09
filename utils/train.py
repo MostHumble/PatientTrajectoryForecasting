@@ -4,6 +4,7 @@ from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 from typing import Optional, List, Dict, Union, Tuple
 import random
+import pandas
 from dataclasses import asdict
 from utils.utils import get_paths, load_data
 from model import Seq2SeqTransformer
@@ -179,7 +180,7 @@ def get_gpu_memory(empty_cache : bool = False):
 class patientTrajectoryForcastingDataset(Dataset):
     """patientTrajectoryForcastingDataset"""
 
-    def __init__(self, source_sequences, target_sequences,, **kw):
+    def __init__(self, source_sequences, target_sequences, **kw):
         """
         Arguments:
             source_sequences (List[List[int]]]): Path to the csv file with annotations.
@@ -198,7 +199,7 @@ class patientTrajectoryForcastingDataset(Dataset):
 class patientTrajectoryForcastingDatasetWithNotes(Dataset):
     """patientTrajectoryForcastingDataset"""
 
-    def __init__(self, source_sequences, target_sequences, hospital_ids,**kw):
+    def __init__(self, source_sequences, target_sequences, hospital_ids, tokenized_notes, **kw):
         """
         Arguments:
             source_sequences (List[List[int]]]): Path to the csv file with annotations.
@@ -206,13 +207,14 @@ class patientTrajectoryForcastingDatasetWithNotes(Dataset):
         self.source_sequences = source_sequences
         self.target_sequences = target_sequences
         self.hospital_ids = hospital_ids
+        self.tokenized_notes = pandas.read_csv(tokenized_notes, index = 'hadm_id')
 
     def __len__(self):
         return len(self.source_sequences)
 
     def __getitem__(self, idx):
         
-        return self.source_sequences[idx], self.target_sequences[idx], self.hospital_ids[idx]
+        return self.source_sequences[idx], self.target_sequences[idx], self.tokenized_notes[self.hospital_ids[idx]].to_dict()
 
 def create_source_mask(src, source_pad_id = 0, DEVICE='cuda:0'):
     """
@@ -370,7 +372,7 @@ def evaluate(model, val_dataloader, loss_fn,  source_pad_id = 0, target_pad_id =
 
 def get_data_loaders(train_batch_size=128, eval_batch_size=128, pin_memory=True,
                      seed=213033, test_size=0.05, valid_size=0.05, strategy=None, predict_procedure=None,
-                     predict_drugs=None, with_notes = False, **kw):
+                     predict_drugs=None, with_notes = False, tokenized_notes = None, **kw):
     """
     Get data loaders for training, validation, and testing.
 
@@ -406,9 +408,9 @@ def get_data_loaders(train_batch_size=128, eval_batch_size=128, pin_memory=True,
     train, test, val = train_test_val_split(source_sequences, target_sequences, hospital_ids_source = hospital_ids_source, test_size = test_size, valid_size = valid_size, random_state = seed)
     
     if with_notes:
-        train_set  = patientTrajectoryForcastingDatasetWithNotes(**train)
-        test_set  = patientTrajectoryForcastingDatasetWithNotes(**test)
-        val_set  = patientTrajectoryForcastingDatasetWithNotes(**val)
+        train_set  = patientTrajectoryForcastingDatasetWithNotes(**train, tokenized_notes = tokenized_notes)
+        test_set  = patientTrajectoryForcastingDatasetWithNotes(**test, tokenized_notes = tokenized_notes)
+        val_set  = patientTrajectoryForcastingDatasetWithNotes(**val, tokenized_notes = tokenized_notes)
     else:
         train_set  = patientTrajectoryForcastingDataset(**train)
         test_set  = patientTrajectoryForcastingDataset(**test)
