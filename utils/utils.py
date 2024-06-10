@@ -3,7 +3,7 @@ import pickle
 from typing import Dict, Tuple, List, Optional
 
 def load_data(path: str = 'outputData/originalData/' , updated_ids_to_types : bool = False,
-               train : bool = False, processed_data : bool = False, with_notes : bool = False) -> Tuple[List[List[List[int]]], Dict[str, int], Dict[str, int], Dict[int, str]]:
+               train : bool = False, processed_data : bool = False, with_notes : bool = False, reindexed : bool = False) -> Tuple[List[List[List[int]]], Dict[str, int], Dict[str, int], Dict[int, str]]:
         """
         Load data from the specified file.
 
@@ -61,6 +61,12 @@ def load_data(path: str = 'outputData/originalData/' , updated_ids_to_types : bo
                 target_tokens_to_ids = pickle.load(open(os.path.join(path, 'target_tokens_to_ids.pkl'), 'rb'))
             except:
                 target_tokens_to_ids = None
+            if reindexed:
+                try:
+                    hospital_ids_source = pickle.load(open(os.path.join(path, 'hospital_ids_source_reindexed.pkl'), 'rb'))
+                except:
+                    hospital_ids_source = None
+                return source_sequences, target_sequences, source_tokens_to_ids, target_tokens_to_ids, old_to_new_ids_source, old_to_new_ids_target, hospital_ids_source
             try:
                 hospital_ids_source = pickle.load(open(os.path.join(path, 'hospital_ids_source.pkl'), 'rb'))
             except:
