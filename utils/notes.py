@@ -462,9 +462,9 @@ def tokenize_notes(notes_path, tokenizer):
     
     notes = pd.read_csv(notes_path) 
     notes.drop_duplicates(subset = ['hadm_id'], inplace = True)
-    
+
     def tokenize_function(example):
-        encodings = tokenizer(example['text'], truncation=True)
+        encodings = tokenizer(example['text'], truncation=True, padding='max_length', max_length=512)
         return encodings
 
 
@@ -492,7 +492,7 @@ def tokenize_and_reindex_hospital_notes(tokenized_datasets, hospital_ids_source,
 
     if save_path:
         tokenized_datasets.save_to_disk(save_path)
-    pickle.dump(hospital_ids_source_reindexed, open(f"{save_path}hospital_ids_source_reindexed.pkl", "wb"))
+        pickle.dump(hospital_ids_source_reindexed, open(f"{save_path}hospital_ids_source_reindexed.pkl", "wb"))
         
     
     return tokenized_datasets, hospital_ids_source_reindexed
