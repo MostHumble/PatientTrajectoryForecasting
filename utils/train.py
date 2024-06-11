@@ -196,25 +196,16 @@ class patientTrajectoryForcastingDataset(Dataset):
         
         return self.source_sequences[idx], self.target_sequences[idx]
     
-class patientTrajectoryForcastingDatasetWithNotes(Dataset):
-    """patientTrajectoryForcastingDataset"""
-
-    def __init__(self, source_sequences, target_sequences, hospital_ids, tokenized_notes, **kw):
-        """
-        Arguments:
-            source_sequences (List[List[int]]]): Path to the csv file with annotations.
-        """
+class ForcastWithNotes(Dataset):
+    def __init__(self, source_sequences, target_sequences, hospital_ids, tokenized_notes):
         self.source_sequences = source_sequences
         self.target_sequences = target_sequences
         self.hospital_ids = hospital_ids
-        self.tokenized_notes = pandas.read_csv(tokenized_notes, index = 'hadm_id')
-
+        self.tokenized_notes = pd.read_csv(tokenized_notes, index_col = 'hadm_id')
     def __len__(self):
         return len(self.source_sequences)
-
     def __getitem__(self, idx):
-        
-        return self.source_sequences[idx], self.target_sequences[idx], self.tokenized_notes[self.hospital_ids[idx]].to_dict()
+        return  self.source_sequences[idx], self.target_sequences[idx], self.tokenized_notes.loc[self.hospital_ids[idx]].to_dict()
 
 def create_source_mask(src, source_pad_id = 0, DEVICE='cuda:0'):
     """
@@ -292,6 +283,29 @@ def create_mask(src, tgt, source_pad_id = 0, target_pad_id = 0, DEVICE='cuda:0')
 
     return src_mask, tgt_mask, source_padding_mask, target_padding_mask
 
+def custom_collate_fn(batch):
+    source_sequences = [item['source_sequences'] for item in batch]
+    target_sequences = [item['target_sequences'] for item in batch]
+    tokenized_notes = [item['tokenized_notes'] for item in batch]
+    hospital_ids_lens = [item['hospital_ids_lens'] for item in batch]
+    
+    # Stack the tensors along a new dimension (default behavior)
+    source_sequences = torch.stack(source_sequences, dim=0)
+    target_sequences = torch.stack(target_sequences, dim=0)
+
+    # For tokenized_notes, we need to stack each sub-element individually
+    tokenized_notes_dict = {key: torch.cat([torch.tensor(tn[key]) for tn in tokenized_notes], dim=0)
+                            for key in tokenized_notes[0].keys()}
+
+    return {
+        'source_sequences': source_sequences,
+        'target_sequences': target_sequences,
+        'tokenized_notes': tokenized_notes_dict,
+        'hospital_ids_lens': hospital_ids_lens,
+    }
+
+    #return {'source_sequences': source_sequences, 'target_sequences': target_sequences}
+
 
 def train_epoch(model, optimizer, train_dataloader, loss_fn, source_pad_id = 0, target_pad_id = 0, DEVICE='cuda:0'):
     """
@@ -330,7 +344,7 @@ def train_epoch(model, optimizer, train_dataloader, loss_fn, source_pad_id = 0, 
 
     return losses / len(train_dataloader)
 
-#remember to fix the ids_to_types_map if need to eval based on types of codes (not needed now because only predict diagnosis)
+# todo : remember to fix the ids_to_types_map if need to eval based on types of codes (not needed now because only predict diagnosis)
 
 def evaluate(model, val_dataloader, loss_fn,  source_pad_id = 0, target_pad_id = 0, DEVICE='cuda:0'):
     """

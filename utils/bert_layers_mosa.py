@@ -516,7 +516,9 @@ class BertEncoder(nn.Module):
                                              attn_mask=attention_mask,
                                              bias=alibi_attn_mask)
                 if output_all_encoded_layers:
-                    all_encoder_layers.append(hidden_states)
+                    
+                    all_encoder_layers.append(bert_padding_module.pad_input(
+                hidden_states, indices, batch, seqlen))
             # Pad inputs and mask. It will insert back zero-padded tokens.
             # Assume ntokens is total number of tokens (padded and non-padded)
             # and ntokens_unpad is total number of non-padded tokens.

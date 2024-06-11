@@ -2,6 +2,12 @@ import pandas
 from tqdm.auto import tqdm 
 import os
 import re 
+from transformers import (
+    AutoModelForMaskedLM,
+    BertTokenizer )
+import pandas as pd
+from datasets import Dataset
+import pickle
 
 class TextPreprocessor:
     def __init__(
@@ -447,3 +453,46 @@ def sent_tokenize_rules(text):
     new_segments = []
 
     return segments
+
+
+
+def tokenize_notes(notes_path, tokenizer):
+    
+    tokenizer = BertTokenizer.from_pretrained(tokenizer)
+    
+    notes = pd.read_csv(notes_path) 
+    notes.drop_duplicates(subset = ['hadm_id'], inplace = True)
+
+    def tokenize_function(example):
+        encodings = tokenizer(example['text'], truncation=True, padding='max_length', max_length=512)
+        return encodings
+
+
+    raw_datasets = Dataset.from_pandas(notes)
+    tokenized_datasets = raw_datasets.map(
+                tokenize_function,
+                batched=True,
+                num_proc=42, # just to have the cache reused (used for cache signature)
+                remove_columns=['text'],
+                load_from_cache_file= True,
+                desc="Running tokenizer on every text in dataset",
+            )
+    
+    return tokenized_datasets
+
+def tokenize_and_reindex_hospital_notes(tokenized_datasets, hospital_ids_source, notes_path, tokenizer = 'bert-base-uncased', save_path = None):
+    
+    tokenized_datasets = tokenize_notes(notes_path, tokenizer)
+    
+    hadm_id_to_index = {entry['hadm_id']: idx for idx, entry in enumerate(tokenized_datasets)}
+    
+    hospital_ids_source_reindexed = [[hadm_id_to_index[hadm_id] for hadm_id in hadm_id_list] for hadm_id_list in hospital_ids_source]
+    
+    tokenized_datasets = tokenized_datasets.remove_columns("hadm_id")
+
+    if save_path:
+        tokenized_datasets.save_to_disk(save_path)
+        pickle.dump(hospital_ids_source_reindexed, open(f"{save_path}hospital_ids_source_reindexed.pkl", "wb"))
+        
+    
+    return tokenized_datasets, hospital_ids_source_reindexed
