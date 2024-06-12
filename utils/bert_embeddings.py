@@ -14,10 +14,12 @@ class MosaicBertForEmbeddingGeneration(BertPreTrainedModel):
     This head is just a linear layer on top of the pooled output.
     """
 
-    def __init__(self, config):
+    def __init__(self, config, add_pooling_layer = False):
+
         super().__init__(config)
+        assert config.num_hidden_layers >= config.num_embedding_layers, 'num_hidden_layers should be greater than or equal to num_embedding_layers'
         self.config = config
-        self.bert = BertModel(config)
+        self.bert = BertModel(config, add_pooling_layer=add_pooling_layer)
        # this resets the weights
         self.post_init()
 
@@ -64,15 +66,11 @@ class MosaicBertForEmbeddingGeneration(BertPreTrainedModel):
         position_ids: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
         subset_mask : Optional[torch.Tensor] = None,
-        masked_tokens_mask: Optional[torch.Tensor] = None,
-        num_layers: Optional[int] = 4,
         hospital_ids_lens: list = None,
     ) -> torch.Tensor:
-
+        
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if masked_tokens_mask is None:
-            subset_mask = None
 
         embedding_output = self.bert.embeddings(input_ids, token_type_ids,
                                            position_ids)
@@ -83,9 +81,10 @@ class MosaicBertForEmbeddingGeneration(BertPreTrainedModel):
             output_all_encoded_layers=True,
             subset_mask=subset_mask)
         
-        return self.get_embeddings(encoder_outputs_all, hospital_ids_lens, num_layers)
+        # batch_size, hidden_dim
+        return self.get_embeddings(encoder_outputs_all, hospital_ids_lens, self.config.num_embedding_layers)
      
-    def get_embeddings(self, encoder_outputs_all, hospital_ids_lens, num_layers=4):
+    def get_embeddings(self, encoder_outputs_all, hospital_ids_lens, num_layers):
         # num_layer (we use 4), batch_size (concatenated visits), seq_len (clinical note sequences), hidden_dim.
         sentence_representation = torch.stack(encoder_outputs_all[-num_layers:]).mean(dim=[0, 2])
         batch_embeddings = []
