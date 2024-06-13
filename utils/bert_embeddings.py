@@ -19,6 +19,7 @@ class MosaicBertForEmbeddingGeneration(BertPreTrainedModel):
         super().__init__(config)
         assert config.num_hidden_layers >= config.num_embedding_layers, 'num_hidden_layers should be greater than or equal to num_embedding_layers'
         self.config = config
+        self.strategy = config.strategy
         self.bert = BertModel(config, add_pooling_layer=add_pooling_layer)
        # this resets the weights
         self.post_init()
@@ -64,14 +65,10 @@ class MosaicBertForEmbeddingGeneration(BertPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        return_dict: Optional[bool] = None,
         subset_mask : Optional[torch.Tensor] = None,
         hospital_ids_lens: list = None,
     ) -> torch.Tensor:
         
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-
         embedding_output = self.bert.embeddings(input_ids, token_type_ids,
                                            position_ids)
         
@@ -82,15 +79,39 @@ class MosaicBertForEmbeddingGeneration(BertPreTrainedModel):
             subset_mask=subset_mask)
         
         # batch_size, hidden_dim
-        return self.get_embeddings(encoder_outputs_all, hospital_ids_lens, self.config.num_embedding_layers)
+        return self.get_embeddings(encoder_outputs_all, hospital_ids_lens, self.config.num_embedding_layers, self.config.strategy)
      
-    def get_embeddings(self, encoder_outputs_all, hospital_ids_lens, num_layers):
-        # num_layer (we use 4), batch_size (concatenated visits), seq_len (clinical note sequences), hidden_dim.
-        sentence_representation = torch.stack(encoder_outputs_all[-num_layers:]).mean(dim=[0, 2])
+    def get_embeddings(self, encoder_outputs_all, hospital_ids_lens, num_layers, strategy):
+
         batch_embeddings = []
         start_idx = 0
-        for length in hospital_ids_lens:
-            # We then average across visits
-            batch_embeddings.append(torch.mean(sentence_representation[start_idx:start_idx + length],dim=0))
-            start_idx += length
-        return torch.stack(batch_embeddings)
+
+        # num_layer (we use default = 4), batch_size (concatenated visits), seq_len (clinical note sequences), hidden_dim.
+        # average across num_layers and seq_len
+        if strategy == 'mean':
+            sentence_representation = torch.stack(encoder_outputs_all[-num_layers:]).mean(dim=[0, 2])
+
+            for length in hospital_ids_lens:
+                # We then average across visits
+                batch_embeddings.append(torch.mean(sentence_representation[start_idx:start_idx + length],dim=0))
+                start_idx += length
+        
+            return torch.stack(batch_embeddings)
+    
+        # averge only across seq_len
+        elif strategy == 'concat':
+            sentence_representation = torch.stack(encoder_outputs_all[-num_layers:]).mean(dim=2)
+
+            for length in hospital_ids_lens:
+                # We then average across visits
+                batch_embeddings.append(torch.mean(sentence_representation[:,start_idx:start_idx + length],dim=1))
+                start_idx += length
+            
+            return torch.stack(batch_embeddings)
+
+        else:
+            raise ValueError(f'{strategy} is not a valid strategy, choose between mean and concat')
+        
+
+        
+        
