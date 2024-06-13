@@ -96,4 +96,90 @@ class Seq2SeqTransformer(nn.Module):
     def batch_encode(self, src: torch.Tensor, src_mask: torch.Tensor, src_key_padding_mask: torch.Tensor):
         return self.transformer.encoder(
                             self.positional_encoding(self.src_tok_emb(src)),  mask=src_mask, src_key_padding_mask=src_key_padding_mask)
+    
     # No need for batch_decode as we're generating one token at a time
+
+
+
+
+    # Seq2Seq Network
+class Seq2SeqTransformerWithNotes(nn.Module):
+    def __init__(self,
+                 num_encoder_layers: int,
+                 num_decoder_layers: int,
+                 emb_size: int,
+                 nhead: int,
+                 src_vocab_size: int,
+                 tgt_vocab_size: int,
+                 dim_feedforward: int,
+                 dropout: float = 0.1,
+                 positional_encoding : bool = False,
+                 bert = None):
+        
+        super(Seq2SeqTransformerWithNotes, self).__init__()
+        self.bert = bert
+        self.bert.eval()
+        self.transformer = Transformer(d_model = emb_size,
+                                       nhead = nhead,
+                                       num_encoder_layers = num_encoder_layers,
+                                       num_decoder_layers = num_decoder_layers,
+                                       dim_feedforward = dim_feedforward,
+                                       dropout = dropout,
+                                       batch_first = True, norm_first = True)
+        self.generator = nn.Linear(emb_size, tgt_vocab_size)
+        self.src_tok_emb = TokenEmbedding(src_vocab_size, emb_size)
+        self.tgt_tok_emb = TokenEmbedding(tgt_vocab_size, emb_size)
+
+        self.positional_encoding = PositionalEncoding(emb_size, dropout = dropout, maxlen = max(src_vocab_size, tgt_vocab_size)+1) if positional_encoding else NoPositionalEncoding()
+
+
+    def forward(self,
+                src: torch.Tensor,
+                trg: torch.Tensor,
+                src_mask: torch.Tensor,
+                tgt_mask: torch.Tensor,
+                src_padding_mask: torch.Tensor,
+                tgt_padding_mask: torch.Tensor,
+                memory_key_padding_mask: torch.Tensor,
+                notes_input_ids: torch.Tensor = None,
+                notes_attention_mask: torch.Tensor = None,
+                notes_token_type_ids: torch.Tensor = None):
+        
+        source_embeds = self.positional_encoding(self.src_tok_emb(src))
+
+        if self.bert:
+            with torch.inference_mode():
+                out_notes = self.bert(input_ids = notes_input_ids,
+                                    attention_mask = notes_attention_mask,
+                                        token_type_ids = notes_token_type_ids)
+            
+            # Fusion happens here
+            # in case of reduction in num_encoder_layers dim
+            # batch, hidden dim    
+            if out_notes.ndim == 2:
+                source_embeds = torch.cat((out_notes.unsqueeze(1), source_embeds), dim = 1)
+
+            # batch, num_encoder_layers, hidden dim
+            if out_notes.ndim == 3:
+                source_embeds = torch.cat((out_notes, source_embeds), dim = 1)
+
+        outs = self.transformer(source_embeds, self.positional_encoding(self.tgt_tok_emb(trg)),
+                                src_mask, tgt_mask, None,
+                                src_padding_mask, tgt_padding_mask, memory_key_padding_mask)
+        
+        return self.generator(outs)
+
+    def encode(self, src: torch.Tensor, src_mask: torch.Tensor):
+        
+        return self.transformer.encoder(
+                            self.positional_encoding(self.src_tok_emb(src)),  mask=src_mask)
+
+    def decode(self, tgt: torch.Tensor, memory: torch.Tensor, tgt_mask: torch.Tensor):
+        return self.transformer.decoder(
+                          self.positional_encoding(self.tgt_tok_emb(tgt)), memory = memory,
+                          tgt_mask = tgt_mask)
+    
+    # We need to add source padding mask to avoid attending to source padding tokens
+    def batch_encode(self, src: torch.Tensor, src_mask: torch.Tensor, src_key_padding_mask: torch.Tensor):
+        return self.transformer.encoder(
+                            self.positional_encoding(self.src_tok_emb(src)),  mask=src_mask, src_key_padding_mask=src_key_padding_mask)
