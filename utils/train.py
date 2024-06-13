@@ -344,6 +344,64 @@ def train_epoch(model, optimizer, train_dataloader, loss_fn, source_pad_id = 0, 
 
     return losses / len(train_dataloader)
 
+def train_epoch_with_notes(model, optimizer, train_dataloader, loss_fn, source_pad_id = 0, target_pad_id = 0, DEVICE='cuda:0', non_pad_token = 42):
+    
+    losses = 0
+    
+    for batch in tqdm(train_dataloader, desc='train'):
+        
+        model.train()
+    
+        # notes data
+        tokenized_notes = batch['tokenized_notes']
+        hospital_ids_lens = batch['hospital_ids_lens'].to(DEVICE)
+        
+        notes_input_ids = tokenized_notes['input_ids'].to(DEVICE)
+        notes_token_type_ids = tokenized_notes['token_type_ids'].to(DEVICE)
+        notes_attention_mask = tokenized_notes['attention_mask'].to(DEVICE)
+        
+        # CCS/ICD data
+        source_input_ids = batch['source_sequences'].to(DEVICE)
+        target_input_ids = batch['target_sequences'].to(DEVICE)
+        
+        target_input_ids_ = target_input_ids[:, :-1]
+        
+        # just to have the correct mask, don't have time to modify
+        if model.bert.config.strategy == 'concat':
+            temp_enc = torch.full((source_input_ids.size(0), model.bert.config.num_embedding_layers), non_pad_token, device = DEVICE)
+        else:
+            temp_enc = torch.full((source_input_ids.size(0), 1), non_pad_token, device = DEVICE)
+            
+        # concat across seq_len
+        source_mask, target_mask, source_padding_mask, target_padding_mask = create_mask(torch.cat([temp_enc, source_input_ids], dim = 1),
+                                                                                                   target_input_ids_,
+                                                                                                   source_pad_id,
+                                                                                                   target_pad_id,
+                                                                                                   DEVICE)
+        del temp_enc
+        
+        logits = model(src = source_input_ids,
+                             trg = target_input_ids_,
+                             src_mask = source_mask,
+                             tgt_mask = target_mask,
+                             src_padding_mask = source_padding_mask,
+                             tgt_padding_mask = target_padding_mask,
+                             memory_key_padding_mask = source_padding_mask,
+                             notes_input_ids = notes_input_ids,
+                             notes_attention_mask = notes_attention_mask,
+                             notes_token_type_ids = notes_token_type_ids,
+                             hospital_ids_lens = hospital_ids_lens
+                            )
+        
+        _target_input_ids = target_input_ids[:, 1:]
+        loss = loss_fn(logits.reshape(-1, logits.shape[-1]), _target_input_ids.reshape(-1))
+        loss.backward()
+        optimizer.step()
+        optimizer.zero_grad()
+        losses += loss.item()
+        
+    return losses / len(train_dataloader)
+
 # todo : remember to fix the ids_to_types_map if need to eval based on types of codes (not needed now because only predict diagnosis)
 
 def evaluate(model, val_dataloader, loss_fn,  source_pad_id = 0, target_pad_id = 0, DEVICE='cuda:0'):
@@ -384,6 +442,76 @@ def evaluate(model, val_dataloader, loss_fn,  source_pad_id = 0, target_pad_id =
     return losses / len(val_dataloader)
 
 
+def evaluate_with_notes(model, val_dataloader, loss_fn,  source_pad_id = 0, target_pad_id = 0, DEVICE='cuda:0', non_pad_token = 42):
+    """
+    Evaluate the model on the validation dataset.
+
+    Args:
+        model (torch.nn.Module): The model to be evaluated.
+        val_dataloader (torch.utils.data.DataLoader): The validation dataloader.
+        loss_fn (torch.nn.Module): The loss function used for evaluation.
+        DEVICE (str, optional): The device to be used for evaluation. Defaults to 'cuda:0'.
+
+    Returns:
+        float: The average loss over the validation dataset.
+    """
+    model.eval()
+
+    losses = 0
+
+    with torch.inference_mode():
+        
+        for batch in tqdm(val_dataloader, desc='evaluation'):
+            
+                # notes data
+            tokenized_notes = batch['tokenized_notes']
+            hospital_ids_lens = batch['hospital_ids_lens'].to(DEVICE)
+            
+            notes_input_ids = tokenized_notes['input_ids'].to(DEVICE)
+            notes_token_type_ids = tokenized_notes['token_type_ids'].to(DEVICE)
+            notes_attention_mask = tokenized_notes['attention_mask'].to(DEVICE)
+            
+            # CCS/ICD data
+            source_input_ids = batch['source_sequences'].to(DEVICE)
+            target_input_ids = batch['target_sequences'].to(DEVICE)
+            
+            target_input_ids_ = target_input_ids[:, :-1]
+            
+            # just to have the correct mask, don't have time to modify
+            if model.bert.config.strategy == 'concat':
+                temp_enc = torch.full((source_input_ids.size(0), model.bert.config.num_embedding_layers), non_pad_token, device = DEVICE)
+            else:
+                temp_enc = torch.full((source_input_ids.size(0), 1), non_pad_token, device = DEVICE)
+                
+            # concat across seq_len
+            source_mask, target_mask, source_padding_mask, target_padding_mask = create_mask(torch.cat([temp_enc, source_input_ids], dim = 1),
+                                                                                                       target_input_ids_,
+                                                                                                       source_pad_id,
+                                                                                                       target_pad_id,
+                                                                                                       DEVICE)
+            del temp_enc
+            
+    
+            logits = model(src = source_input_ids,
+                             trg = target_input_ids_,
+                             src_mask = source_mask,
+                             tgt_mask = target_mask,
+                             src_padding_mask = source_padding_mask,
+                             tgt_padding_mask = target_padding_mask,
+                             memory_key_padding_mask = source_padding_mask,
+                             notes_input_ids = notes_input_ids,
+                             notes_attention_mask = notes_attention_mask,
+                             notes_token_type_ids = notes_token_type_ids,
+                             hospital_ids_lens = hospital_ids_lens
+                            )
+    
+            _target_input_ids = target_input_ids[:, 1:]
+            
+            loss = loss_fn(logits.reshape(-1, logits.shape[-1]), _target_input_ids.reshape(-1))
+            losses += loss.item()
+
+    return losses / len(val_dataloader)
+
 def get_data_loaders(train_batch_size=128, eval_batch_size=128, pin_memory=True,
                      seed=213033, test_size=0.05, valid_size=0.05, strategy=None, predict_procedure=None,
                      predict_drugs=None, with_notes = False, tokenized_notes = None, **kw):
@@ -412,8 +540,6 @@ def get_data_loaders(train_batch_size=128, eval_batch_size=128, pin_memory=True,
 
     train_data_path = get_paths(path_config, strategy, predict_procedure, predict_drugs, train = True, processed_data = True, with_notes = with_notes)
 
-    #_ , ids_to_types_map, tokens_to_ids_map, __ = load_data(train_data_path['train_data_path'], train = True)
-
     source_sequences, target_sequences, source_tokens_to_ids, target_tokens_to_ids, _, __, hospital_ids_source = load_data(train_data_path['processed_data_path'], processed_data = True)
 
     embedding_sizes['embedding_size_source'] = ((len(source_tokens_to_ids) + 63) // 64) *64
@@ -421,14 +547,9 @@ def get_data_loaders(train_batch_size=128, eval_batch_size=128, pin_memory=True,
 
     train, test, val = train_test_val_split(source_sequences, target_sequences, hospital_ids_source = hospital_ids_source, test_size = test_size, valid_size = valid_size, random_state = seed)
     
-    if with_notes:
-        train_set  = patientTrajectoryForcastingDatasetWithNotes(**train, tokenized_notes = tokenized_notes)
-        test_set  = patientTrajectoryForcastingDatasetWithNotes(**test, tokenized_notes = tokenized_notes)
-        val_set  = patientTrajectoryForcastingDatasetWithNotes(**val, tokenized_notes = tokenized_notes)
-    else:
-        train_set  = patientTrajectoryForcastingDataset(**train)
-        test_set  = patientTrajectoryForcastingDataset(**test)
-        val_set  = patientTrajectoryForcastingDataset(**val)
+    train_set  = patientTrajectoryForcastingDataset(**train)
+    test_set  = patientTrajectoryForcastingDataset(**test)
+    val_set  = patientTrajectoryForcastingDataset(**val)
 
     train_dataloader = DataLoader(train_set, batch_size = train_batch_size, shuffle = True, pin_memory = pin_memory)
     val_dataloader = DataLoader(val_set, batch_size = eval_batch_size, shuffle = False, pin_memory = pin_memory)
