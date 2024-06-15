@@ -347,6 +347,7 @@ def train_epoch(model, optimizer, train_dataloader, loss_fn, source_pad_id = 0, 
 # todo : remember to fix the ids_to_types_map if need to eval based on types of codes (not needed now because only predict diagnosis)
 
 def evaluate(model, val_dataloader, loss_fn,  source_pad_id = 0, target_pad_id = 0, DEVICE='cuda:0'):
+
     """
     Evaluate the model on the validation dataset.
 
@@ -359,6 +360,7 @@ def evaluate(model, val_dataloader, loss_fn,  source_pad_id = 0, target_pad_id =
     Returns:
         float: The average loss over the validation dataset.
     """
+
     model.eval()
 
     losses = 0
@@ -382,7 +384,6 @@ def evaluate(model, val_dataloader, loss_fn,  source_pad_id = 0, target_pad_id =
             losses += loss.item()
 
     return losses / len(val_dataloader)
-
 
 def get_data_loaders(train_batch_size=128, eval_batch_size=128, pin_memory=True,
                      seed=213033, test_size=0.05, valid_size=0.05, strategy=None, predict_procedure=None,
@@ -412,8 +413,6 @@ def get_data_loaders(train_batch_size=128, eval_batch_size=128, pin_memory=True,
 
     train_data_path = get_paths(path_config, strategy, predict_procedure, predict_drugs, train = True, processed_data = True, with_notes = with_notes)
 
-    #_ , ids_to_types_map, tokens_to_ids_map, __ = load_data(train_data_path['train_data_path'], train = True)
-
     source_sequences, target_sequences, source_tokens_to_ids, target_tokens_to_ids, _, __, hospital_ids_source = load_data(train_data_path['processed_data_path'], processed_data = True)
 
     embedding_sizes['embedding_size_source'] = ((len(source_tokens_to_ids) + 63) // 64) *64
@@ -421,14 +420,9 @@ def get_data_loaders(train_batch_size=128, eval_batch_size=128, pin_memory=True,
 
     train, test, val = train_test_val_split(source_sequences, target_sequences, hospital_ids_source = hospital_ids_source, test_size = test_size, valid_size = valid_size, random_state = seed)
     
-    if with_notes:
-        train_set  = patientTrajectoryForcastingDatasetWithNotes(**train, tokenized_notes = tokenized_notes)
-        test_set  = patientTrajectoryForcastingDatasetWithNotes(**test, tokenized_notes = tokenized_notes)
-        val_set  = patientTrajectoryForcastingDatasetWithNotes(**val, tokenized_notes = tokenized_notes)
-    else:
-        train_set  = patientTrajectoryForcastingDataset(**train)
-        test_set  = patientTrajectoryForcastingDataset(**test)
-        val_set  = patientTrajectoryForcastingDataset(**val)
+    train_set  = patientTrajectoryForcastingDataset(**train)
+    test_set  = patientTrajectoryForcastingDataset(**test)
+    val_set  = patientTrajectoryForcastingDataset(**val)
 
     train_dataloader = DataLoader(train_set, batch_size = train_batch_size, shuffle = True, pin_memory = pin_memory)
     val_dataloader = DataLoader(val_set, batch_size = eval_batch_size, shuffle = False, pin_memory = pin_memory)

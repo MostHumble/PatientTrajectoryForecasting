@@ -133,3 +133,93 @@ def get_sequences(model, dataloader : torch.utils.data.dataloader.DataLoader,  s
             pred_trgs.extend(batch_pred_trgs)
             targets.extend(batch_targets)
     return pred_trgs, targets
+
+
+def get_sequences_with_notes(model, dataloader : torch.utils.data.dataloader.DataLoader,  source_pad_id : int = 0,
+                   tgt_tokens_to_ids : Dict[str, int] =  None, max_len : int = 150,  DEVICE : str ='cuda:0', non_pad_token : int =  42):
+    """
+    return relevant forcasted and sequences made by the model on the dataset.
+
+    Args:
+        model (torch.nn.Module): The model to be evaluated.
+        val_dataloader (torch.utils.data.DataLoader): The validation dataloader.
+        source_pad_id (int, optional): The padding token ID for the source input. Defaults to 0.
+        DEVICE (str, optional): The device to run the evaluation on. Defaults to 'cuda:0'.
+        tgt_tokens_to_ids (dict, optional): A dictionary mapping target tokens to their IDs. Defaults to None.
+        max_len (int, optional): The maximum length of the generated target sequence. Defaults to 150.
+        non_pad_token (int, optional): The non-padding token ID. Defaults to 42.
+    Returns:
+        List[List[int]], List[List[int]]: The list of relevant and forecasted sequences.
+    """
+
+    model.eval()
+    pred_trgs = []
+    targets = []
+    with torch.inference_mode():
+        for batch in tqdm(dataloader, desc='scoring'):
+            
+            batch_pred_trgs = []
+            batch_targets = []
+            
+            tokenized_notes = batch['tokenized_notes']
+            hospital_ids_lens = batch['hospital_ids_lens'].to(DEVICE)
+            
+            notes_input_ids = tokenized_notes['input_ids'].to(DEVICE)
+            notes_token_type_ids = tokenized_notes['token_type_ids'].to(DEVICE)
+            notes_attention_mask = tokenized_notes['attention_mask'].to(DEVICE)
+            
+            # CCS/ICD data
+            source_input_ids = batch['source_sequences'].to(DEVICE)
+            target_input_ids = batch['target_sequences'].to(DEVICE)
+            
+            target_input_ids_ = target_input_ids[:, :-1]
+            
+            # just to have the correct mask, don't have time to modify
+            if model.bert.config.strategy == 'concat':
+                temp_enc = torch.full((source_input_ids.size(0), model.bert.config.num_embedding_layers), non_pad_token, device = DEVICE)
+            else:
+                temp_enc = torch.full((source_input_ids.size(0), 1), non_pad_token, device = DEVICE)
+                
+            # concat across seq_len
+            source_mask, source_padding_mask = create_source_mask(torch.cat([temp_enc, source_input_ids], dim = 1), source_pad_id, DEVICE)
+                                                                                                       
+            del temp_enc
+            
+            memory = model.batch_encode(src = source_input_ids,
+                                        src_mask = source_mask,
+                                        src_key_padding_mask = source_padding_mask,
+                                        notes_input_ids = notes_input_ids,
+                                        notes_attention_mask = notes_attention_mask,
+                                        notes_token_type_ids = notes_token_type_ids,
+                                        hospital_ids_lens = hospital_ids_lens
+                                       )
+            
+            pred_trg = torch.tensor(tgt_tokens_to_ids['BOS'], device= DEVICE).repeat(source_input_ids.size(0)).unsqueeze(1)
+            # generate target sequence one token at a time at batch level
+            for i in range(max_len):
+                trg_mask = generate_square_subsequent_mask(i+1, DEVICE)
+                output = model.decode(pred_trg, memory, trg_mask)
+                probs = model.generator(output[:, -1])
+                pred_tokens = torch.argmax(probs, dim=1)
+                pred_trg = torch.cat((pred_trg, pred_tokens.unsqueeze(1)), dim=1)
+                eov_mask = pred_tokens == tgt_tokens_to_ids['EOV']
+
+                if eov_mask.any():
+                    # extend with sequences that have reached EOV
+                    batch_pred_trgs.extend(pred_trg[eov_mask].tolist())
+                    batch_targets.extend(target_input_ids[eov_mask].tolist())
+                    # break if all have reached EOV
+                    if eov_mask.all():
+                        break  
+                    # edit corresponding target sequences
+                    target_input_ids = target_input_ids[~eov_mask]
+                    pred_trg = pred_trg[~eov_mask]
+                    memory = memory[~eov_mask]
+        
+            # add elements that have never reached EOV
+            if source_input_ids.size(0) != len(batch_pred_trgs):
+                batch_pred_trgs.extend(pred_trg.tolist())
+                batch_targets.extend(target_input_ids.tolist())
+            pred_trgs.extend(batch_pred_trgs)
+            targets.extend(batch_targets)
+    return pred_trgs, targets
