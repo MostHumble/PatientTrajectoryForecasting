@@ -7,7 +7,7 @@ from utils.train import train_epoch, evaluate, get_data_loaders
 import wandb
 import argparse
 import os
-from model import Seq2SeqTransformer
+from model import Seq2SeqTransformer, Seq2SeqTransformerWithNotes
 from utils.eval import mapk, get_sequences
 import warnings
 # currently getting warnings because of mask datatypes, you might wanna change this not installing from environment.yml
@@ -54,26 +54,31 @@ class Config:
     gamma : float = 0.1
 
     
-def train_transformer(config, data_config, train_dataloader, val_dataloader, ks = [20,40,72], positional_encoding = True, dropout = 0.1):
+from torch.nn.parallel import DistributedDataParallel as DDP
+
+def train_transformer(config, data_config, train_dataloader, val_dataloader, ks = [20,40,72], positional_encoding = True, dropout = 0.1, with_notes = False):
 
     DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
-    transformer = Seq2SeqTransformer(config.num_encoder_layers, config.num_decoder_layers,
-                                      config.dim_per_head * config.nhead, config.nhead, 
+    if with_notes:
+        transformer = Seq2SeqTransformerWithNotes(config.num_encoder_layers, config.num_decoder_layers,
+                                      config.emb_size, config.nhead, 
                                       data_config.source_vocab_size, data_config.target_vocab_size,
                                       config.ffn_hid_dim,
                                       dropout,
                                       positional_encoding)
+    else:
+        transformer = Seq2SeqTransformer(config.num_encoder_layers, config.num_decoder_layers,
+                                        config.dim_per_head * config.nhead, config.nhead, 
+                                        data_config.source_vocab_size, data_config.target_vocab_size,
+                                        config.ffn_hid_dim,
+                                        dropout,
+                                        positional_encoding)
     
     print(f'number of params: {sum(p.numel() for p in transformer.parameters())/1e6 :.2f}M')
 
     for p in transformer.parameters():
         if p.dim() > 1:
             nn.init.xavier_uniform_(p)
-
-    if torch.cuda.device_count() > 1:
-        print("Let's use", torch.cuda.device_count(), "GPUs!")
-        transformer = nn.DataParallel(transformer)
 
     transformer = transformer.to(DEVICE)
 
@@ -141,7 +146,7 @@ if __name__ == '__main__':
 
     wandb.init(
       # Set the project where this run will be logged
-      project="PTF_SDP_D"
+      project="PTF_SDP_D", config=asdict(config), reinit=True
       )
     try:
         train_transformer(args, data_config, train_dataloader, val_dataloader)
