@@ -89,26 +89,33 @@ class MosaicBertForEmbeddingGeneration(BertPreTrainedModel):
         # num_layer (we use default = 4), batch_size (concatenated visits), seq_len (clinical note sequences), hidden_dim.
         # average across num_layers and seq_len
         if strategy == 'mean':
+            # batch_size (concatenated visits), hidden_dim.
             sentence_representation = torch.stack(encoder_outputs_all[-num_layers:]).mean(dim=[0, 2])
 
             for length in hospital_ids_lens:
                 # We then average across visits
+                # batch_size (true batch size), hidden_dim.
                 batch_embeddings.append(torch.mean(sentence_representation[start_idx:start_idx + length],dim=0))
                 start_idx += length
         
             return torch.stack(batch_embeddings)
     
-        # averge only across seq_len
         elif strategy == 'concat':
+            # num_layer, batch_size (concatenated visits), hidden_dim.
             sentence_representation = torch.stack(encoder_outputs_all[-num_layers:]).mean(dim=2)
 
             for length in hospital_ids_lens:
                 # We then average across visits
+                # num_layer, batch_size (true batch size), hidden_dim.
                 batch_embeddings.append(torch.mean(sentence_representation[:,start_idx:start_idx + length],dim=1))
                 start_idx += length
             
             return torch.stack(batch_embeddings)
-
+        
+        elif strategy == 'all':
+            # num_layer, batch_size (concatenated visits), seq_len (clinical note sequences), hidden_dim.
+            sentence_representation = torch.stack(encoder_outputs_all[-num_layers:])
+            return sentence_representation
         else:
             raise ValueError(f'{strategy} is not a valid strategy, choose between mean and concat')
         
