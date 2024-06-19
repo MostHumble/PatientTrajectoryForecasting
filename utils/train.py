@@ -3,14 +3,17 @@ from tqdm import tqdm
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 from typing import Optional, List, Dict, Union, Tuple
+from torch.optim import Optimizer
+from torch.optim.lr_scheduler import LambdaLR
+from functools import partial
 import random
-import pandas
 from dataclasses import asdict
 from utils.utils import get_paths, load_data
 from model import Seq2SeqTransformer
 import numpy as np
 import yaml
 import os
+import math 
 
 def train_test_val_split(source_sequences : List[List[int]], target_sequences : List[List[int]], hospital_ids_source : List[int] = None,
                 test_size : float = 0.05, valid_size : float = 0.05, random_state = None)\
@@ -525,3 +528,76 @@ def save_config(config, run_num= 0,prefix:str =''):
     # Save the parameters to a YAML file (e.g., 'model_config.yaml')
     with open(f'{config_checkpoint_dir}/{prefix}_model_config_run_{run_num}.yaml', 'w') as yaml_file:
         yaml.dump(model_params, yaml_file)
+
+
+
+
+
+
+
+def _get_wsd_scheduler_lambda(
+    current_step: int,
+    *,
+    num_warmup_steps: int,
+    num_stable_steps: int,
+    num_decay_steps: int,
+    num_cycles: float,
+    min_lr_ratio: float,
+):
+    if current_step < num_warmup_steps:
+        return float(current_step) / float(max(1, num_warmup_steps))
+    if current_step < num_warmup_steps + num_stable_steps:
+        return 1.0
+    if current_step < num_warmup_steps + num_stable_steps + num_decay_steps:
+        progress = float(current_step - num_warmup_steps - num_stable_steps) / float(max(1, num_decay_steps))
+        value = max(0.0, 0.5 * (1.0 + math.cos(math.pi * float(num_cycles) * 2.0 * progress)))
+        return (1.0 - min_lr_ratio) * value + min_lr_ratio
+    return min_lr_ratio
+
+
+
+def WarmupStableDecay(
+    optimizer: Optimizer,
+    num_warmup_steps: int,
+    num_stable_steps: int,
+    num_decay_steps: int,
+    min_lr_ratio: float = 0,
+    num_cycles: float = 0.5,
+    last_epoch: int = -1,
+):
+    """
+    Create a schedule with a learning rate that has three stages:
+    1. linear increase from 0 to initial lr.
+    2. constant lr (equal to initial lr).
+    3. decrease following the values of the cosine function between the initial lr set in the optimizer to
+       a fraction of initial lr.
+
+    Args:
+        optimizer ([`~torch.optim.Optimizer`]):
+            The optimizer for which to schedule the learning rate.
+        num_warmup_steps (`int`):
+            The number of steps for the warmup phase.
+        num_stable_steps (`int`):
+            The number of steps for the stable phase.
+        num_decay_steps (`int`):
+            The number of steps for the cosine annealing phase.
+        min_lr_ratio (`float`, *optional*, defaults to 0):
+            The minimum learning rate as a ratio of the initial learning rate.
+        num_cycles (`float`, *optional*, defaults to 0.5):
+            The number of waves in the cosine schedule (the defaults is to just decrease from the max value to 0
+            following a half-cosine).
+        last_epoch (`int`, *optional*, defaults to -1):
+            The index of the last epoch when resuming training.
+
+    Return:
+        `torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
+    """
+    lr_lambda = partial(
+        _get_wsd_scheduler_lambda,
+        num_warmup_steps=num_warmup_steps,
+        num_stable_steps=num_stable_steps,
+        num_decay_steps=num_decay_steps,
+        min_lr_ratio=min_lr_ratio,
+        num_cycles=num_cycles,
+    )
+    return LambdaLR(optimizer, lr_lambda, last_epoch)
