@@ -3,13 +3,13 @@ import yaml
 import torch
 import torch.nn as nn
 import torch.optim.lr_scheduler as lr_scheduler
+from utils.train import WarmupStableDecay
 import wandb
 import argparse
 import os
 from model import  Seq2SeqTransformerWithNotes
 from utils.eval import mapk, recallTop
 import torch.distributed as dist
-from torch.nn.parallel import DistributedDataParallel as DDP
 from transformers import AutoConfig
 from utils.bert_embeddings import MosaicBertForEmbeddingGeneration
 from transformers.models.bert.configuration_bert import BertConfig
@@ -18,8 +18,6 @@ from datasets import  load_from_disk
 from torch.utils.data import DataLoader, Dataset
 from utils.train import create_mask, generate_square_subsequent_mask, create_source_mask
 from typing import Dict, Optional
-from socket import gethostname
-from utils.train import WarmupStableDecay
 from utils.utils import (
     load_data,
     get_paths,
@@ -28,14 +26,6 @@ from utils.utils import (
 
 
 
-# currently getting warnings because of mask datatypes, you might wanna change this not installing from environment.yml
-
-#train_batch_size = 128, eval_batch_size = 128, num_workers = 5,pin_memory = True
-
-
-def setup(rank, world_size):
-    # initialize the process group
-    dist.init_process_group("nccl", rank=rank, world_size=world_size)
 
 @dataclass
 class DataConfig:
@@ -151,15 +141,15 @@ def get_sequences_with_notes(model, dataloader : torch.utils.data.dataloader.Dat
             target_input_ids = batch['target_sequences'].to(DEVICE)
                         
             # just to have the correct mask, don't have time to modify
-            if model.module.bert.config.strategy == 'concat':
-                temp_enc = torch.cat([torch.full((source_input_ids.size(0), model.module.bert.config.num_embedding_layers), non_pad_token, device = DEVICE), source_input_ids], dim = 1)
-            elif model.module.bert.config.strategy == 'mean':
+            if model.bert.config.strategy == 'concat':
+                temp_enc = torch.cat([torch.full((source_input_ids.size(0), model.bert.config.num_embedding_layers), non_pad_token, device = DEVICE), source_input_ids], dim = 1)
+            elif model.bert.config.strategy == 'mean':
                 temp_enc = torch.cat([torch.full((source_input_ids.size(0), 1), non_pad_token, device = DEVICE), source_input_ids], dim = 1)
-            elif model.module.bert.config.strategy == 'all':
+            elif model.bert.config.strategy == 'all':
                 temp_enc = []
                 for i,length in enumerate(hospital_ids_lens):
                     # we cat across seq_len, and truncate to 512 (max_seq_len_input)
-                    temp_enc.append(torch.cat([torch.full((length.item() * model.module.bert.config.num_embedding_layers,), non_pad_token, device = DEVICE), source_input_ids[i]], dim = 0)[:512])
+                    temp_enc.append(torch.cat([torch.full((length.item() * model.bert.config.num_embedding_layers,), non_pad_token, device = DEVICE), source_input_ids[i]], dim = 0)[:512])
                 # batch, seq_len  
                 temp_enc = torch.stack(temp_enc)
                 
@@ -168,7 +158,7 @@ def get_sequences_with_notes(model, dataloader : torch.utils.data.dataloader.Dat
                                                                                                        
             del temp_enc
             
-            memory = model.module.batch_encode(src = source_input_ids,
+            memory = model.batch_encode(src = source_input_ids,
                                         src_mask = source_mask,
                                         src_key_padding_mask = source_padding_mask,
                                         notes_input_ids = notes_input_ids,
@@ -181,8 +171,8 @@ def get_sequences_with_notes(model, dataloader : torch.utils.data.dataloader.Dat
             # generate target sequence one token at a time at batch level
             for i in range(max_len):
                 trg_mask = generate_square_subsequent_mask(i+1, DEVICE)
-                output = model.module.decode(pred_trg, memory, trg_mask)
-                probs = model.module.generator(output[:, -1])
+                output = model.decode(pred_trg, memory, trg_mask)
+                probs = model.generator(output[:, -1])
                 pred_tokens = torch.argmax(probs, dim=1)
                 pred_trg = torch.cat((pred_trg, pred_tokens.unsqueeze(1)), dim=1)
                 eov_mask = pred_tokens == tgt_tokens_to_ids['EOV']
@@ -245,15 +235,15 @@ def evaluate_with_notes(model, val_dataloader, loss_fn,  source_pad_id = 0, targ
             
             # just to have the correct mask, don't have time to modify
             # source_input_ids : batch , seq_len
-            if model.module.bert.config.strategy == 'concat':
-                temp_enc = torch.cat([torch.full((source_input_ids.size(0), model.module.bert.config.num_embedding_layers), non_pad_token, device = DEVICE), source_input_ids], dim = 1)
-            elif model.module.bert.config.strategy == 'mean':
+            if model.bert.config.strategy == 'concat':
+                temp_enc = torch.cat([torch.full((source_input_ids.size(0), model.bert.config.num_embedding_layers), non_pad_token, device = DEVICE), source_input_ids], dim = 1)
+            elif model.bert.config.strategy == 'mean':
                 temp_enc = torch.cat([torch.full((source_input_ids.size(0), 1), non_pad_token, device = DEVICE), source_input_ids], dim = 1)
-            elif model.module.bert.config.strategy == 'all':
+            elif model.bert.config.strategy == 'all':
                 temp_enc = []
                 for i,length in enumerate(hospital_ids_lens):
                     # we cat across seq_len, and truncate to 512 (max_seq_len_input)
-                    temp_enc.append(torch.cat([torch.full((length.item() * model.module.bert.config.num_embedding_layers,), non_pad_token, device = DEVICE), source_input_ids[i]], dim = 0)[:512])
+                    temp_enc.append(torch.cat([torch.full((length.item() * model.bert.config.num_embedding_layers,), non_pad_token, device = DEVICE), source_input_ids[i]], dim = 0)[:512])
                 # batch, seq_len  
                 temp_enc = torch.stack(temp_enc)
                 
@@ -310,10 +300,8 @@ def xavier_init(transformer):
                 nn.init.xavier_uniform_(p)
     
     return transformer
-
-def train_epoch_with_notes(model, optimizer, scheduler, train_dataloader,
-                            loss_fn, source_pad_id = 0, target_pad_id = 0,
-                              DEVICE='cuda', non_pad_token = 42):
+from typing import List
+def train_epoch_with_notes(model, scheduler , optimizer, train_dataloader, loss_fn, source_pad_id = 0, target_pad_id = 0, DEVICE='cuda:0', non_pad_token = 42):
     
     losses = 0
     
@@ -336,16 +324,16 @@ def train_epoch_with_notes(model, optimizer, scheduler, train_dataloader,
         target_input_ids_ = target_input_ids[:, :-1]
         
         # just to have the correct mask, don't have time to modify
-        if model.module.bert.config.strategy == 'concat':
-            temp_enc = torch.cat([torch.full((source_input_ids.size(0), model.module.bert.config.num_embedding_layers), non_pad_token, device = DEVICE), source_input_ids], dim = 1)
-        elif model.module.bert.config.strategy == 'mean':
+        if model.bert.config.strategy == 'concat':
+            temp_enc = torch.cat([torch.full((source_input_ids.size(0), model.bert.config.num_embedding_layers), non_pad_token, device = DEVICE), source_input_ids], dim = 1)
+        elif model.bert.config.strategy == 'mean':
             temp_enc = torch.cat([torch.full((source_input_ids.size(0), 1), non_pad_token, device = DEVICE), source_input_ids], dim = 1)
-        elif model.module.bert.config.strategy == 'all':
+        elif model.bert.config.strategy == 'all':
             temp_enc = []
             for i,length in enumerate(hospital_ids_lens):
                 # we cat across seq_len, and truncate to 512 (max_seq_len_input)
                 # we do this because we cat from mulitple layers of the bert encoder * num_visits
-                temp_enc.append(torch.cat([torch.full((length.item() * model.module.bert.config.num_embedding_layers,), non_pad_token, device = DEVICE), source_input_ids[i]], dim = 0)[:512])
+                temp_enc.append(torch.cat([torch.full((length.item() * model.bert.config.num_embedding_layers,), non_pad_token, device = DEVICE), source_input_ids[i]], dim = 0)[:512])
             # batch, seq_len  
             temp_enc = torch.stack(temp_enc)
             
@@ -379,7 +367,7 @@ def train_epoch_with_notes(model, optimizer, scheduler, train_dataloader,
 
         if scheduler[1] == 'WarmupStableDecay':
                 scheduler[0].step()
-        
+            
     return losses / len(train_dataloader)
 
 
@@ -441,42 +429,51 @@ def train_transformer(args, data_config, train_dataloader, val_dataloader, test_
     transformer = xavier_init(transformer)
 
     transformer = transformer.to(DEVICE)
-
-    ddp_transformer = DDP(transformer, device_ids=[DEVICE], find_unused_parameters=True)
    
     loss_fn = torch.nn.CrossEntropyLoss(ignore_index= data_config.target_pad_id, label_smoothing = args.label_smoothing)
 
-    optimizer = torch.optim.AdamW(ddp_transformer.parameters(), lr=args.learning_rate)
+    optimizer = torch.optim.AdamW(transformer.parameters(), lr=args.learning_rate)
 
     # Select the scheduler based on configuration
     if args.scheduler == 'ReduceLROnPlateau':
         scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, 'min')
     elif args.scheduler == 'CosineAnnealingWarmRestarts':
         scheduler = lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0 = 4, eta_min = 1e-6)
+    elif args.scheduler == 'OneCycleLR':
+        scheduler = lr_scheduler.OneCycleLR(optimizer, max_lr=args.learning_rate, total_steps=args.num_train_epochs)
     elif args.scheduler == 'WarmupStableDecay':
         total_steps = len(train_dataloader) * args.num_train_epochs
         num_warmup_steps = int(total_steps * args.warmup_ratio)
         num_stable_steps = int(total_steps * args.stable_ratio)
         num_decay_steps = total_steps - num_warmup_steps - num_stable_steps
         scheduler = WarmupStableDecay(optimizer, num_warmup_steps = num_warmup_steps, num_stable_steps = num_stable_steps, num_decay_steps = num_decay_steps, min_lr_ratio = args.min_lr_ratio)
-
+    
+    # add wandb loss logging
     for epoch in range(args.num_train_epochs):
         test_mapk = {}
-        train_loss = train_epoch_with_notes(ddp_transformer,
-                                              optimizer,
-                                                [scheduler,args.scheduler],
-                                                train_dataloader, loss_fn, data_config.source_pad_id, data_config.target_pad_id, DEVICE)
-        if epoch + 1 % args.eval_every == 0:
-            if local_rank == 0:
-                val_loss =  evaluate_with_notes(ddp_transformer, val_dataloader, loss_fn, data_config.source_pad_id, data_config.target_pad_id, DEVICE)
-                pred_trgs, targets =  get_sequences_with_notes(ddp_transformer, test_dataloader, data_config.source_pad_id, target_tokens_to_ids, max_len = 96, DEVICE = DEVICE)
-                if pred_trgs:
-                    test_mapk = {f"test_map@{k}": mapk(targets, pred_trgs, k) for k in ks}
-                    test_recallk = {f"test_recall@{k}": recallTop(targets, pred_trgs, rank = [k])[0] for k in ks}
-                    wandb.log({"Epoch": epoch, "train_loss": train_loss,"val_loss":val_loss, "lr" : optimizer.param_groups[0]['lr'], **test_mapk, **test_recallk})
-        if isinstance(scheduler, lr_scheduler.ReduceLROnPlateau):
+        # model, optimizer, train_dataloader, loss_fn, source_pad_id = 0, target_pad_id = 0, DEVICE='cuda:0', non_pad_token = 42
+        train_loss = train_epoch_with_notes(model = transformer,
+                                            optimizer = optimizer,
+                                            scheduler = [scheduler, args.scheduler],
+                                            train_dataloader = train_dataloader,
+                                            loss_fn = loss_fn,
+                                            source_pad_id = data_config.source_pad_id,
+                                            target_pad_id = data_config.target_pad_id,
+                                            DEVICE = DEVICE,
+                                            non_pad_token = 42
+                                            )
+    
+        if ( epoch + 1 ) % args.eval_every == 0:
+            val_loss =  evaluate_with_notes(transformer, val_dataloader, loss_fn, data_config.source_pad_id, data_config.target_pad_id, DEVICE)
+            pred_trgs, targets =  get_sequences_with_notes(transformer, test_dataloader, data_config.source_pad_id, target_tokens_to_ids, max_len = 96, DEVICE = DEVICE)
+            if pred_trgs:
+                test_mapk = {f"test_map@{k}": mapk(targets, pred_trgs, k) for k in ks}
+                test_recallk = {f"test_recall@{k}": recallTop(targets, pred_trgs, rank = [k])[0] for k in ks}
+                wandb.log({"Epoch": epoch, "train_loss": train_loss,"val_loss":val_loss, "lr" : optimizer.param_groups[0]['lr'], **test_mapk, **test_recallk})
+            
+        if args.scheduler == 'ReduceLROnPlateau':
             scheduler.step(train_loss)
-        else:
+        elif isinstance(scheduler, lr_scheduler.CosineAnnealingWarmRestarts):
             scheduler.step()
 
 if __name__ == '__main__':
@@ -519,7 +516,7 @@ if __name__ == '__main__':
     parser.add_argument('--warmup_ratio', type=float, default = 0.6, help='Warmup ratio')
     parser.add_argument('--stable_ratio', type=float, default = 0.1, help='Stable ratio')
     parser.add_argument('--min_lr_ratio', type=float, default = 0.2, help='Minimum learning rate ratio')
-    #
+
     args = parser.parse_args()
     if args.use_positional_encoding_notes.lower() == 'true':
         args.use_positional_encoding_notes = True
@@ -529,25 +526,11 @@ if __name__ == '__main__':
         print('Not using positional encoding for notes')
         
     config = Config()
+
     data_config = DataConfig()
 
-    world_size    = int(os.environ["WORLD_SIZE"])
-    rank          = int(os.environ["SLURM_PROCID"])
-    gpus_per_node = int(os.environ["SLURM_GPUS_ON_NODE"])
-    
-    #assert gpus_per_node == torch.cuda.device_count()
-    print(f"Hello from rank {rank} of {world_size} on {gethostname()} where there are" \
-          f" {gpus_per_node} allocated GPUs per node.", flush=True)
+    DEVICE = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
-    setup(rank, world_size)
-    
-    if rank == 0: print(f"Group initialized? {dist.is_initialized()}", flush=True)
-
-    local_rank = int(os.environ['SLURM_LOCALID'])
-
-    torch.cuda.set_device(local_rank)
-    print(f"host: {gethostname()}, rank: {rank}, local_rank: {local_rank}")
-    
     with open('PatientTrajectoryForecasting/paths.yaml', 'r') as file:
         path_config = yaml.safe_load(file)
 
@@ -566,13 +549,10 @@ if __name__ == '__main__':
     val_dataset = torch.load('final_dataset/val_dataset.pth')
     test_dataset = torch.load('final_dataset/test_dataset.pth')
 
-    train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset,
-                                                                    num_replicas=world_size,
-                                                                    rank=rank)
     
     train_dataloader = DataLoader(train_dataset,
+                                  shuffle=True,
                                   batch_size=args.train_batch_size,
-                                  sampler=train_sampler,
                                   num_workers=int(os.environ["SLURM_CPUS_PER_TASK"]),
                                   pin_memory=True,
                                   collate_fn=custom_collate_fn)
@@ -599,25 +579,19 @@ if __name__ == '__main__':
     data_config.target_pad_id = target_tokens_to_ids['PAD']
     data_config.source_pad_id = source_tokens_to_ids['PAD']
 
-    if local_rank == 0:
-        wandb.init(
-        # Set the project where this run will be logged
-        project="PTF_SDP_D_NOTES_IV", config=args)
+    wandb.init(
+    # Set the project where this run will be logged
+    project="PTF_SDP_D_NOTES_SG", config=args)
     
     try:
         train_transformer(args, data_config=data_config,
                           train_dataloader=train_dataloader,
                           val_dataloader=val_dataloader,
                           test_dataloader=test_dataloader,
-                          DEVICE=local_rank)
+                          DEVICE=DEVICE)
     except Exception as e:
         wandb.log({"error": str(e)})
-        raise e
     finally:
-        if local_rank == 0:
-            wandb.finish()
-        dist.destroy_process_group()
-        exit()
-
+        wandb.finish()
     
     
