@@ -19,6 +19,7 @@ from torch.utils.data import DataLoader, Dataset
 from utils.train import create_mask, generate_square_subsequent_mask, create_source_mask
 from typing import Dict, Optional
 from socket import gethostname
+from utils.train import WarmupStableDecay
 from utils.utils import (
     load_data,
     get_paths,
@@ -44,8 +45,8 @@ class DataConfig:
     valid_size : float = 0.10
     predict_procedure : bool = None
     predict_drugs : bool = None
-    input_max_length :int = 448
-    target_max_length :int = 64
+    input_max_length :int = 512
+    target_max_length :int = 96
     source_vocab_size : int = None
     target_vocab_size : int = None
     target_pad_id : int = 0
@@ -151,12 +152,19 @@ def get_sequences_with_notes(model, dataloader : torch.utils.data.dataloader.Dat
                         
             # just to have the correct mask, don't have time to modify
             if model.module.bert.config.strategy == 'concat':
-                temp_enc = torch.full((source_input_ids.size(0), model.module.bert.config.num_embedding_layers), non_pad_token, device = DEVICE)
-            else:
-                temp_enc = torch.full((source_input_ids.size(0), 1), non_pad_token, device = DEVICE)
+                temp_enc = torch.cat([torch.full((source_input_ids.size(0), model.module.bert.config.num_embedding_layers), non_pad_token, device = DEVICE), source_input_ids], dim = 1)
+            elif model.module.bert.config.strategy == 'mean':
+                temp_enc = torch.cat([torch.full((source_input_ids.size(0), 1), non_pad_token, device = DEVICE), source_input_ids], dim = 1)
+            elif model.module.bert.config.strategy == 'all':
+                temp_enc = []
+                for i,length in enumerate(hospital_ids_lens):
+                    # we cat across seq_len, and truncate to 512 (max_seq_len_input)
+                    temp_enc.append(torch.cat([torch.full((length.item() * model.module.bert.config.num_embedding_layers,), non_pad_token, device = DEVICE), source_input_ids[i]], dim = 0)[:512])
+                # batch, seq_len  
+                temp_enc = torch.stack(temp_enc)
                 
             # concat across seq_len
-            source_mask, source_padding_mask = create_source_mask(torch.cat([temp_enc, source_input_ids], dim = 1), source_pad_id, DEVICE)
+            source_mask, source_padding_mask = create_source_mask(temp_enc, source_pad_id, DEVICE)
                                                                                                        
             del temp_enc
             
@@ -236,17 +244,25 @@ def evaluate_with_notes(model, val_dataloader, loss_fn,  source_pad_id = 0, targ
             target_input_ids_ = target_input_ids[:, :-1]
             
             # just to have the correct mask, don't have time to modify
+            # source_input_ids : batch , seq_len
             if model.module.bert.config.strategy == 'concat':
-                temp_enc = torch.full((source_input_ids.size(0), model.module.bert.config.num_embedding_layers), non_pad_token, device = DEVICE)
-            else:
-                temp_enc = torch.full((source_input_ids.size(0), 1), non_pad_token, device = DEVICE)
+                temp_enc = torch.cat([torch.full((source_input_ids.size(0), model.module.bert.config.num_embedding_layers), non_pad_token, device = DEVICE), source_input_ids], dim = 1)
+            elif model.module.bert.config.strategy == 'mean':
+                temp_enc = torch.cat([torch.full((source_input_ids.size(0), 1), non_pad_token, device = DEVICE), source_input_ids], dim = 1)
+            elif model.module.bert.config.strategy == 'all':
+                temp_enc = []
+                for i,length in enumerate(hospital_ids_lens):
+                    # we cat across seq_len, and truncate to 512 (max_seq_len_input)
+                    temp_enc.append(torch.cat([torch.full((length.item() * model.module.bert.config.num_embedding_layers,), non_pad_token, device = DEVICE), source_input_ids[i]], dim = 0)[:512])
+                # batch, seq_len  
+                temp_enc = torch.stack(temp_enc)
                 
             # concat across seq_len
-            source_mask, target_mask, source_padding_mask, target_padding_mask = create_mask(torch.cat([temp_enc, source_input_ids], dim = 1),
-                                                                                                       target_input_ids_,
-                                                                                                       source_pad_id,
-                                                                                                       target_pad_id,
-                                                                                                       DEVICE)
+            source_mask, target_mask, source_padding_mask, target_padding_mask = create_mask(temp_enc,
+                                                                                             target_input_ids_,
+                                                                                             source_pad_id,
+                                                                                             target_pad_id,
+                                                                                             DEVICE)
             del temp_enc
             
     
@@ -287,10 +303,17 @@ def xavier_init(transformer):
     for p in transformer.tgt_tok_emb.parameters():
         if p.dim() > 1:
             nn.init.xavier_uniform_(p)
+
+    if transformer.bert.config.strategy == 'all':
+        for p in transformer.projection.parameters():
+            if p.dim() > 1:
+                nn.init.xavier_uniform_(p)
     
     return transformer
 
-def train_epoch_with_notes(model, optimizer, train_dataloader, loss_fn, source_pad_id = 0, target_pad_id = 0, DEVICE='cuda:0', non_pad_token = 42):
+def train_epoch_with_notes(model, optimizer, scheduler, train_dataloader,
+                            loss_fn, source_pad_id = 0, target_pad_id = 0,
+                              DEVICE='cuda', non_pad_token = 42):
     
     losses = 0
     
@@ -314,16 +337,24 @@ def train_epoch_with_notes(model, optimizer, train_dataloader, loss_fn, source_p
         
         # just to have the correct mask, don't have time to modify
         if model.module.bert.config.strategy == 'concat':
-            temp_enc = torch.full((source_input_ids.size(0), model.module.bert.config.num_embedding_layers), non_pad_token, device = DEVICE)
-        else:
-            temp_enc = torch.full((source_input_ids.size(0), 1), non_pad_token, device = DEVICE)
+            temp_enc = torch.cat([torch.full((source_input_ids.size(0), model.module.bert.config.num_embedding_layers), non_pad_token, device = DEVICE), source_input_ids], dim = 1)
+        elif model.module.bert.config.strategy == 'mean':
+            temp_enc = torch.cat([torch.full((source_input_ids.size(0), 1), non_pad_token, device = DEVICE), source_input_ids], dim = 1)
+        elif model.module.bert.config.strategy == 'all':
+            temp_enc = []
+            for i,length in enumerate(hospital_ids_lens):
+                # we cat across seq_len, and truncate to 512 (max_seq_len_input)
+                # we do this because we cat from mulitple layers of the bert encoder * num_visits
+                temp_enc.append(torch.cat([torch.full((length.item() * model.module.bert.config.num_embedding_layers,), non_pad_token, device = DEVICE), source_input_ids[i]], dim = 0)[:512])
+            # batch, seq_len  
+            temp_enc = torch.stack(temp_enc)
             
         # concat across seq_len
-        source_mask, target_mask, source_padding_mask, target_padding_mask = create_mask(torch.cat([temp_enc, source_input_ids], dim = 1),
-                                                                                                   target_input_ids_,
-                                                                                                   source_pad_id,
-                                                                                                   target_pad_id,
-                                                                                                   DEVICE)
+        source_mask, target_mask, source_padding_mask, target_padding_mask = create_mask(temp_enc,
+                                                                                         target_input_ids_,
+                                                                                         source_pad_id,
+                                                                                         target_pad_id,
+                                                                                         DEVICE)
         del temp_enc
         
         logits = model(src = source_input_ids,
@@ -345,6 +376,9 @@ def train_epoch_with_notes(model, optimizer, train_dataloader, loss_fn, source_p
         optimizer.step()
         optimizer.zero_grad()
         losses += loss.item()
+
+        if scheduler[1] == 'WarmupStableDecay':
+                scheduler[0].step()
         
     return losses / len(train_dataloader)
 
@@ -357,6 +391,7 @@ def get_model (
     pretrained_checkpoint: Optional[str] = None,
     num_embedding_layers : int = 4,
     strategy = 'concat',
+    seq_len = 512
     ):
     
     model_config, unused_kwargs = BertConfig.get_config_dict(model_config)
@@ -368,6 +403,7 @@ def get_model (
     config.update(unused_kwargs)
     config.num_embedding_layers = num_embedding_layers
     config.strategy = strategy
+    config.seq_len = seq_len
     model = MosaicBertForEmbeddingGeneration.from_pretrained(
             pretrained_checkpoint=pretrained_checkpoint, config=config)
     
@@ -378,20 +414,24 @@ def get_model (
 
 def train_transformer(args, data_config, train_dataloader, val_dataloader, test_dataloader, ks = [20,40,60], positional_encoding = True, dropout = 0.1, DEVICE='cuda:0'):
 
-    bert_model = get_model( pretrained_model_name=PRETRAINED_MODEL_NAME,
-                            model_config=MODEL_CONFIG, 
-                            pretrained_checkpoint=PRETRAINED_MODEL_CHECKPOINT,
-                            num_embedding_layers=args.num_embedding_layers,
-                            strategy=args.strategy)
+    bert_model = get_model(pretrained_model_name=PRETRAINED_MODEL_NAME,
+                           model_config=MODEL_CONFIG,
+                           pretrained_checkpoint=PRETRAINED_MODEL_CHECKPOINT,
+                           num_embedding_layers=args.num_embedding_layers,
+                           strategy=args.strategy)
 
 
-    transformer = Seq2SeqTransformerWithNotes(args.num_encoder_layers, args.num_decoder_layers,
-                                  args.emb_size, args.nhead, 
-                                  data_config.source_vocab_size, data_config.target_vocab_size,
-                                  args.ffn_hid_dim,
-                                  dropout,
-                                  positional_encoding,
-                                  bert = bert_model)
+    transformer = Seq2SeqTransformerWithNotes(num_encoder_layers = args.num_encoder_layers,
+                                              num_decoder_layers = args.num_decoder_layers,
+                                              emb_size = args.emb_size,
+                                              nhead = args.nhead,
+                                              src_vocab_size = data_config.source_vocab_size,
+                                              tgt_vocab_size = data_config.target_vocab_size,
+                                              use_positional_encoding_notes = args.use_positional_encoding_notes,
+                                              dim_feedforward = args.ffn_hid_dim,
+                                              dropout = dropout,
+                                              positional_encoding = positional_encoding,
+                                              bert = bert_model)
 
     for param in transformer.bert.parameters():
         param.requires_grad = False
@@ -413,20 +453,29 @@ def train_transformer(args, data_config, train_dataloader, val_dataloader, test_
         scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, 'min')
     elif args.scheduler == 'CosineAnnealingWarmRestarts':
         scheduler = lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0 = 4, eta_min = 1e-6)
-    
-    # add wandb loss logging
+    elif args.scheduler == 'WarmupStableDecay':
+        total_steps = len(train_dataloader) * args.num_train_epochs
+        num_warmup_steps = int(total_steps * args.warmup_ratio)
+        num_stable_steps = int(total_steps * args.stable_ratio)
+        num_decay_steps = total_steps - num_warmup_steps - num_stable_steps
+        scheduler = WarmupStableDecay(optimizer, num_warmup_steps = num_warmup_steps, num_stable_steps = num_stable_steps, num_decay_steps = num_decay_steps, min_lr_ratio = args.min_lr_ratio)
+
     for epoch in range(args.num_train_epochs):
         test_mapk = {}
-        train_loss = train_epoch_with_notes(ddp_transformer,  optimizer, train_dataloader, loss_fn, data_config.source_pad_id, data_config.target_pad_id, DEVICE)
-        val_loss =  evaluate_with_notes(ddp_transformer, val_dataloader, loss_fn, data_config.source_pad_id, data_config.target_pad_id, DEVICE)
-        if local_rank == 0:
-            pred_trgs, targets =  get_sequences_with_notes(ddp_transformer, test_dataloader, data_config.source_pad_id, target_tokens_to_ids, max_len = 96, DEVICE = DEVICE)
-            if pred_trgs:
-                test_mapk = {f"test_map@{k}": mapk(targets, pred_trgs, k) for k in ks}
-                test_recallk = {f"test_recall@{k}": recallTop(targets, pred_trgs, rank = [k])[0] for k in ks}
-                wandb.log({"Epoch": epoch, "train_loss": train_loss,"val_loss":val_loss, "lr" : optimizer.param_groups[0]['lr'], **test_mapk, **test_recallk})
+        train_loss = train_epoch_with_notes(ddp_transformer,
+                                              optimizer,
+                                                [scheduler,args.scheduler],
+                                                train_dataloader, loss_fn, data_config.source_pad_id, data_config.target_pad_id, DEVICE)
+        if epoch + 1 % args.eval_every == 0:
+            if local_rank == 0:
+                val_loss =  evaluate_with_notes(ddp_transformer, val_dataloader, loss_fn, data_config.source_pad_id, data_config.target_pad_id, DEVICE)
+                pred_trgs, targets =  get_sequences_with_notes(ddp_transformer, test_dataloader, data_config.source_pad_id, target_tokens_to_ids, max_len = 96, DEVICE = DEVICE)
+                if pred_trgs:
+                    test_mapk = {f"test_map@{k}": mapk(targets, pred_trgs, k) for k in ks}
+                    test_recallk = {f"test_recall@{k}": recallTop(targets, pred_trgs, rank = [k])[0] for k in ks}
+                    wandb.log({"Epoch": epoch, "train_loss": train_loss,"val_loss":val_loss, "lr" : optimizer.param_groups[0]['lr'], **test_mapk, **test_recallk})
         if isinstance(scheduler, lr_scheduler.ReduceLROnPlateau):
-            scheduler.step(val_loss)
+            scheduler.step(train_loss)
         else:
             scheduler.step()
 
@@ -455,7 +504,7 @@ if __name__ == '__main__':
     parser.add_argument('--learning_rate', type=float, default = 3e-5, help='Learning rate (min 5e-05, max 0.008)')
 
     # Categorical distribution parameters
-    parser.add_argument('--scheduler', type=str, default='CosineAnnealingWarmRestarts', choices=['ReduceLROnPlateau', 'CosineAnnealingWarmRestarts'], help='Type of scheduler')
+    parser.add_argument('--scheduler', type=str, default='CosineAnnealingWarmRestarts', choices=['ReduceLROnPlateau', 'CosineAnnealingWarmRestarts', 'WarmupStableDecay'], help='Type of scheduler')
 
     # Quantized log uniform distribution parameters (handled as int for simplicity)
     parser.add_argument('--train_batch_size', type=int, default = 16, help='Training batch size (min 32, max 48)')
@@ -465,11 +514,20 @@ if __name__ == '__main__':
     parser.add_argument('--predict_procedure', type=bool, default = False, help='Predict procedure codes')
     parser.add_argument('--predict_drugs', type=bool, default = False, help='Predict drug codes')
     parser.add_argument('--ptf_strategy', type=str, default = 'SDP', help='Strategy for patient trajectory forecasting')
-
-    
-
+    parser.add_argument('--use_positional_encoding_notes', type=str, default = 'False', help='Use positional encoding for notes')
+    parser.add_argument('--eval_every', type=int, default = 1, help='Evaluate every n epochs')
+    parser.add_argument('--warmup_ratio', type=float, default = 0.6, help='Warmup ratio')
+    parser.add_argument('--stable_ratio', type=float, default = 0.1, help='Stable ratio')
+    parser.add_argument('--min_lr_ratio', type=float, default = 0.2, help='Minimum learning rate ratio')
+    #
     args = parser.parse_args()
-
+    if args.use_positional_encoding_notes.lower() == 'true':
+        args.use_positional_encoding_notes = True
+        print('Using positional encoding for notes')
+    else:
+        args.use_positional_encoding_notes = False
+        print('Not using positional encoding for notes')
+        
     config = Config()
     data_config = DataConfig()
 
@@ -542,11 +600,9 @@ if __name__ == '__main__':
     data_config.source_pad_id = source_tokens_to_ids['PAD']
 
     if local_rank == 0:
-
         wandb.init(
         # Set the project where this run will be logged
-        project="PTF_SDP_D_NOTES", config=args
-        )
+        project="PTF_SDP_D_NOTES_IV", config=args)
     
     try:
         train_transformer(args, data_config=data_config,
@@ -561,6 +617,7 @@ if __name__ == '__main__':
         if local_rank == 0:
             wandb.finish()
         dist.destroy_process_group()
+        exit()
 
     
     
