@@ -9,7 +9,6 @@ import argparse
 import os
 from model import  Seq2SeqTransformerWithNotes
 from utils.eval import mapk, recallTop
-import torch.distributed as dist
 from transformers import AutoConfig
 from utils.bert_embeddings import MosaicBertForEmbeddingGeneration
 from transformers.models.bert.configuration_bert import BertConfig
@@ -308,6 +307,8 @@ def train_epoch_with_notes(model, scheduler , optimizer, train_dataloader, loss_
     for batch in tqdm(train_dataloader, desc='train'):
         
         model.train()
+        optimizer.zero_grad()
+
     
         # notes data
         tokenized_notes = batch['tokenized_notes']
@@ -362,7 +363,6 @@ def train_epoch_with_notes(model, scheduler , optimizer, train_dataloader, loss_
         loss = loss_fn(logits.reshape(-1, logits.shape[-1]), _target_input_ids.reshape(-1))
         loss.backward()
         optimizer.step()
-        optimizer.zero_grad()
         losses += loss.item()
 
         if scheduler[1] == 'WarmupStableDecay':
@@ -462,18 +462,19 @@ def train_transformer(args, data_config, train_dataloader, val_dataloader, test_
                                             DEVICE = DEVICE,
                                             non_pad_token = 42
                                             )
-    
-        if ( epoch + 1 ) % args.eval_every == 0:
+        print(f'Train loss: {train_loss}', flush=True)
+        if epoch  % args.eval_every == 0 and epoch != 0:
             val_loss =  evaluate_with_notes(transformer, val_dataloader, loss_fn, data_config.source_pad_id, data_config.target_pad_id, DEVICE)
             pred_trgs, targets =  get_sequences_with_notes(transformer, test_dataloader, data_config.source_pad_id, target_tokens_to_ids, max_len = 96, DEVICE = DEVICE)
             if pred_trgs:
                 test_mapk = {f"test_map@{k}": mapk(targets, pred_trgs, k) for k in ks}
                 test_recallk = {f"test_recall@{k}": recallTop(targets, pred_trgs, rank = [k])[0] for k in ks}
-                wandb.log({"Epoch": epoch, "train_loss": train_loss,"val_loss":val_loss, "lr" : optimizer.param_groups[0]['lr'], **test_mapk, **test_recallk})
-            
+                wandb.log({"Epoch": epoch, "train_loss": train_loss,"val_loss":val_loss, "lr" : optimizer.param_groups[0]['lr'], **test_mapk, **test_recallk}, step = epoch)
+        else:
+            wandb.log({"Epoch": epoch, "train_loss": train_loss, "lr" : optimizer.param_groups[0]['lr']})
         if args.scheduler == 'ReduceLROnPlateau':
             scheduler.step(train_loss)
-        elif isinstance(scheduler, lr_scheduler.CosineAnnealingWarmRestarts):
+        elif args.scheduler == 'CosineAnnealingWarmRestarts':
             scheduler.step()
 
 if __name__ == '__main__':
@@ -581,7 +582,7 @@ if __name__ == '__main__':
 
     wandb.init(
     # Set the project where this run will be logged
-    project="PTF_SDP_D_NOTES_SG", config=args)
+    project="PTF_SDP_D_NOTES_LONGER", config=args)
     
     try:
         train_transformer(args, data_config=data_config,
