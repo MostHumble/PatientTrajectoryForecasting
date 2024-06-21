@@ -24,6 +24,7 @@ from utils.utils import (
     load_data,
     get_paths,
 )
+import logging
 
 
 
@@ -130,7 +131,8 @@ def get_sequences_with_notes(model, dataloader : torch.utils.data.dataloader.Dat
         List[List[int]], List[List[int]]: The list of relevant and forecasted sequences.
     """
 
-    model.eval()
+    model.module.eval()
+    print('scoring', flush=True)
     pred_trgs = []
     targets = []
     with torch.inference_mode():
@@ -221,7 +223,7 @@ def evaluate_with_notes(model, val_dataloader, loss_fn,  source_pad_id = 0, targ
     Returns:
         float: The average loss over the validation dataset.
     """
-    model.eval()
+    model.module.eval()
 
     losses = 0
 
@@ -266,7 +268,7 @@ def evaluate_with_notes(model, val_dataloader, loss_fn,  source_pad_id = 0, targ
             del temp_enc
             
     
-            logits = model(src = source_input_ids,
+            logits = model.module(src = source_input_ids,
                              trg = target_input_ids_,
                              src_mask = source_mask,
                              tgt_mask = target_mask,
@@ -314,13 +316,13 @@ def xavier_init(transformer):
 def train_epoch_with_notes(model, optimizer, scheduler, train_dataloader,
                             loss_fn, source_pad_id = 0, target_pad_id = 0,
                               DEVICE='cuda', non_pad_token = 42):
-    
+    print('training on device', DEVICE)
     losses = 0
     
     for batch in tqdm(train_dataloader, desc='train'):
         
         model.train()
-    
+        optimizer.zero_grad()
         # notes data
         tokenized_notes = batch['tokenized_notes']
         hospital_ids_lens = batch['hospital_ids_lens'].to(DEVICE)
@@ -372,15 +374,14 @@ def train_epoch_with_notes(model, optimizer, scheduler, train_dataloader,
         
         _target_input_ids = target_input_ids[:, 1:]
         loss = loss_fn(logits.reshape(-1, logits.shape[-1]), _target_input_ids.reshape(-1))
+        losses += loss.item()
         loss.backward()
         optimizer.step()
-        optimizer.zero_grad()
-        losses += loss.item()
 
         if scheduler[1] == 'WarmupStableDecay':
                 scheduler[0].step()
         
-    return losses / len(train_dataloader)
+    return losses / len(train_dataloader), model, optimizer, scheduler[0]
 
 
 
@@ -436,13 +437,13 @@ def train_transformer(args, data_config, train_dataloader, val_dataloader, test_
     for param in transformer.bert.parameters():
         param.requires_grad = False
 
-    print(f'number of params: {sum(p.numel() for p in transformer.parameters())/1e6 :.2f}M')
+    print(f'number of params: {sum(p.numel() for p in transformer.parameters())/1e6 :.2f}M', flush=True)
 
     transformer = xavier_init(transformer)
 
     transformer = transformer.to(DEVICE)
 
-    ddp_transformer = DDP(transformer, device_ids=[DEVICE], find_unused_parameters=True)
+    ddp_transformer = DDP(transformer, device_ids=[DEVICE])
    
     loss_fn = torch.nn.CrossEntropyLoss(ignore_index= data_config.target_pad_id, label_smoothing = args.label_smoothing)
 
@@ -459,24 +460,33 @@ def train_transformer(args, data_config, train_dataloader, val_dataloader, test_
         num_stable_steps = int(total_steps * args.stable_ratio)
         num_decay_steps = total_steps - num_warmup_steps - num_stable_steps
         scheduler = WarmupStableDecay(optimizer, num_warmup_steps = num_warmup_steps, num_stable_steps = num_stable_steps, num_decay_steps = num_decay_steps, min_lr_ratio = args.min_lr_ratio)
-
+    print(f'Device: {DEVICE} is entering training loop', flush=True)
+    dist.barrier()
     for epoch in range(args.num_train_epochs):
         test_mapk = {}
-        train_loss = train_epoch_with_notes(ddp_transformer,
+        # losses / len(train_dataloader), model, optimizer, scheduler
+        train_loss, ddp_transformer, optimizer, scheduler  = train_epoch_with_notes(ddp_transformer,
                                               optimizer,
-                                                [scheduler,args.scheduler],
+                                                [scheduler, args.scheduler],
                                                 train_dataloader, loss_fn, data_config.source_pad_id, data_config.target_pad_id, DEVICE)
-        if epoch + 1 % args.eval_every == 0:
-            if local_rank == 0:
+        
+        dist.barrier()
+        logging.info(f'Epoch: {epoch}, Train Loss: {train_loss}, LR: {optimizer.param_groups[0]["lr"]}, Device: {DEVICE}')
+        if DEVICE == 0:
+            wandb.log({"Epoch": epoch, "train_loss": train_loss, "lr" : optimizer.param_groups[0]['lr']})
+            if epoch % args.eval_every == 0 and epoch > 0:
                 val_loss =  evaluate_with_notes(ddp_transformer, val_dataloader, loss_fn, data_config.source_pad_id, data_config.target_pad_id, DEVICE)
                 pred_trgs, targets =  get_sequences_with_notes(ddp_transformer, test_dataloader, data_config.source_pad_id, target_tokens_to_ids, max_len = 96, DEVICE = DEVICE)
                 if pred_trgs:
                     test_mapk = {f"test_map@{k}": mapk(targets, pred_trgs, k) for k in ks}
                     test_recallk = {f"test_recall@{k}": recallTop(targets, pred_trgs, rank = [k])[0] for k in ks}
-                    wandb.log({"Epoch": epoch, "train_loss": train_loss,"val_loss":val_loss, "lr" : optimizer.param_groups[0]['lr'], **test_mapk, **test_recallk})
+                    wandb.log({"val_loss":val_loss,**test_mapk, **test_recallk}, step=epoch)
+                    print(f'test_map@20: {test_mapk["test_map@20"]}, test_map@40: {test_mapk["test_map@40"]}, test_map@60: {test_mapk["test_map@60"]}, test_recall@20: {test_recallk["test_recall@20"]}, test_recall@40: {test_recallk["test_recall@40"]}, test_recall@60: {test_recallk["test_recall@60"]}', flush=True)
+
+        dist.barrier()
         if isinstance(scheduler, lr_scheduler.ReduceLROnPlateau):
             scheduler.step(train_loss)
-        else:
+        elif isinstance(scheduler, lr_scheduler.CosineAnnealingWarmRestarts):
             scheduler.step()
 
 if __name__ == '__main__':
@@ -545,7 +555,6 @@ if __name__ == '__main__':
 
     local_rank = int(os.environ['SLURM_LOCALID'])
 
-    torch.cuda.set_device(local_rank)
     print(f"host: {gethostname()}, rank: {rank}, local_rank: {local_rank}")
     
     with open('PatientTrajectoryForecasting/paths.yaml', 'r') as file:
@@ -600,9 +609,9 @@ if __name__ == '__main__':
     data_config.source_pad_id = source_tokens_to_ids['PAD']
 
     if local_rank == 0:
-        wandb.init(
+       wandb.init(
         # Set the project where this run will be logged
-        project="PTF_SDP_D_NOTES_IV", config=args)
+       project="PTF_SDP_D_NOTES_LONGER", config=args)
     
     try:
         train_transformer(args, data_config=data_config,
@@ -611,13 +620,9 @@ if __name__ == '__main__':
                           test_dataloader=test_dataloader,
                           DEVICE=local_rank)
     except Exception as e:
-        wandb.log({"error": str(e)})
-        raise e
-    finally:
         if local_rank == 0:
-            wandb.finish()
-        dist.destroy_process_group()
-        exit()
+            wandb.log({"error": str(e)})
+            wandb.finish()        
+    dist.destroy_process_group()
 
-    
     
