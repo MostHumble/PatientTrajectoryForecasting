@@ -103,7 +103,7 @@ def train_transformer(config, data_config, train_dataloader, val_dataloader, ks 
             wandb.log({"Epoch": epoch, "train_loss": train_loss,"val_loss":val_loss, "lr" : optimizer.param_groups[0]['lr'], **val_mapk})
         if isinstance(scheduler, lr_scheduler.ReduceLROnPlateau):
             scheduler.step(val_loss)
-        else:
+        elif isinstance(scheduler, lr_scheduler.CosineAnnealingWarmRestarts):
             scheduler.step()
 
 
