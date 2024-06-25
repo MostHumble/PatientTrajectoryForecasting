@@ -9,19 +9,21 @@ import logging
 logger = logging.getLogger(__name__)
 
 class MosaicBertForEmbeddingGeneration(BertPreTrainedModel):
-    """Bert Model transformer with a sequence classification/regression head.
 
-    This head is just a linear layer on top of the pooled output.
-    """
+    def __init__(self, config, add_pooling_layer=False):
+        """
+        Initializes the BertEmbeddings class.
 
-    def __init__(self, config, add_pooling_layer = False):
-
+        Args:
+            config (BertConfig): The configuration for the BERT model.
+            add_pooling_layer (bool, optional): Whether to add a pooling layer. Defaults to False.
+        """
         super().__init__(config)
         assert config.num_hidden_layers >= config.num_embedding_layers, 'num_hidden_layers should be greater than or equal to num_embedding_layers'
         self.config = config
         self.strategy = config.strategy
         self.bert = BertModel(config, add_pooling_layer=add_pooling_layer)
-       # this resets the weights
+        # this resets the weights
         self.post_init()
 
 
