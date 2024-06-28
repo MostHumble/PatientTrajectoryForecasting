@@ -133,3 +133,40 @@ def get_sequences(model, dataloader : torch.utils.data.dataloader.DataLoader,  s
             pred_trgs.extend(batch_pred_trgs)
             targets.extend(batch_targets)
     return pred_trgs, targets
+
+
+def get_random_stats(targets: List[List[int]], seq_len : int = 96, ks : List[int] = [20, 40, 60], num_runs_avg : int = 5):
+    """
+    Returns the average MAP@k and Recall@k scores for a random forecasting model.
+
+    Args:
+        targets (List[List[int]]): The list of target sequences.
+        seq_len (int, optional): The length of the forecasted sequence. Defaults to 96.
+        ks (List[int], optional): The list of k values for MAP@k and Recall@k. Defaults to [20, 40, 60].
+        num_runs_avg (int, optional): The number of runs to average the results over. Defaults to 5.
+    Returns:
+        Dict[str, float], Dict[str, float]: The average MAP@k and Recall@k scores.
+    """
+    # targets = [concated_dt[i]['target_sequences'].numpy().tolist() for i in range(len(concated_dt))]
+    unique_targets = list(set([item for sublist in targets for item in sublist]))
+    
+    cumulative_mapk = {f"test_map@{k}": 0.0 for k in ks}
+    cumulative_recallk = {f"test_recall@{k}": 0.0 for k in ks}
+    
+    for _ in range(num_runs_avg):
+        
+        forecasted = [np.random.choice(unique_targets, size=seq_len, replace=True).tolist() for _ in range(len(targets))]
+    
+        run_mapk = {f"test_map@{k}": mapk(targets, forecasted, k) for k in ks}
+        run_recallk = {f"test_recall@{k}": recallTop(targets, forecasted, rank=[k])[0] for k in ks}
+    
+        # Accumulate results
+        for k in ks:
+            cumulative_mapk[f"test_map@{k}"] += run_mapk[f"test_map@{k}"]
+            cumulative_recallk[f"test_recall@{k}"] += run_recallk[f"test_recall@{k}"]
+    
+    # Compute average results
+    average_mapk = {f"test_map@{k}": cumulative_mapk[f"test_map@{k}"] / num_runs_avg for k in ks}
+    average_recallk = {f"test_recall@{k}": cumulative_recallk[f"test_recall@{k}"] / num_runs_avg for k in ks}
+
+    return average_mapk, average_recallk    
