@@ -436,7 +436,7 @@ def get_data_loaders(train_batch_size=128, eval_batch_size=128, pin_memory=True,
 
 def save_checkpoint(epoch, model, optimizer, val_loss = float('inf'),
                     force = False, prefix:str = 'test_model', run_num = 0,
-                    checkpoint_patience = 3):
+                    checkpoint_patience = 3, model_checkpoint_dir = 'model_checkpoints'):
     """
     Saves a checkpoint of the model during training if the validation loss improves.
 
@@ -454,20 +454,18 @@ def save_checkpoint(epoch, model, optimizer, val_loss = float('inf'),
     Returns:
         bool: False if the checkpoint is not saved, True otherwise.
     """
-    global current_patience, best_val_loss
+    global current_patience, best_val_metric
     
-    model_checkpoint_dir = 'model_checkpoints'
     os.makedirs(model_checkpoint_dir, exist_ok = True)
-    print(best_val_loss)
     
-    if force or (val_loss < best_val_loss):
-        best_val_loss = min(val_loss, best_val_loss)
+    if force or (val_loss < best_val_metric):
+        best_val_metric = min(val_loss, best_val_metric)
         current_patience = 0  # Reset patience counter
         checkpoint = {
             'epoch': epoch,
             'model_state_dict': model.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),
-            'best_val_loss': best_val_loss
+            'best_val_metric': best_val_metric
         }
         model_checkpoint_path = os.path.join(model_checkpoint_dir, f'{prefix}_best_checkpoint_run_{run_num}.pt')
         torch.save(checkpoint, model_checkpoint_path)
