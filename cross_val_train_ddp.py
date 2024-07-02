@@ -319,7 +319,7 @@ def xavier_init(transformer):
     
     return transformer
 
-def train_epoch_with_notes(model, optimizer, scheduler, train_dataloader,
+def train_epoch_with_notes(args, model, optimizer, scheduler, train_dataloader,
                             loss_fn, source_pad_id = 0, target_pad_id = 0,
                               DEVICE='cuda', non_pad_token = 42):
     print('training on device', DEVICE)
@@ -364,8 +364,9 @@ def train_epoch_with_notes(model, optimizer, scheduler, train_dataloader,
                                                                                          target_pad_id,
                                                                                          DEVICE)
         del temp_enc
-        
-        logits = model(src = source_input_ids,
+        if args.mixed_precision:
+            with torch.cuda.amp.autocast():
+                logits = model(src = source_input_ids,
                              trg = target_input_ids_,
                              src_mask = source_mask,
                              tgt_mask = target_mask,
@@ -377,9 +378,24 @@ def train_epoch_with_notes(model, optimizer, scheduler, train_dataloader,
                              notes_token_type_ids = notes_token_type_ids,
                              hospital_ids_lens = hospital_ids_lens
                             )
-        
-        _target_input_ids = target_input_ids[:, 1:]
-        loss = loss_fn(logits.reshape(-1, logits.shape[-1]), _target_input_ids.reshape(-1))
+                _target_input_ids = target_input_ids[:, 1:]
+                loss = loss_fn(logits.reshape(-1, logits.shape[-1]), _target_input_ids.reshape(-1))
+        else:
+            logits = model(src = source_input_ids,
+                                trg = target_input_ids_,
+                                src_mask = source_mask,
+                                tgt_mask = target_mask,
+                                src_padding_mask = source_padding_mask,
+                                tgt_padding_mask = target_padding_mask,
+                                memory_key_padding_mask = source_padding_mask,
+                                notes_input_ids = notes_input_ids,
+                                notes_attention_mask = notes_attention_mask,
+                                notes_token_type_ids = notes_token_type_ids,
+                                hospital_ids_lens = hospital_ids_lens
+                                )
+            
+            _target_input_ids = target_input_ids[:, 1:]
+            loss = loss_fn(logits.reshape(-1, logits.shape[-1]), _target_input_ids.reshape(-1))
         losses += loss.item()
         loss.backward()
         optimizer.step()
@@ -419,37 +435,15 @@ def get_model (
 
 
 
-def train_transformer(args, data_config, train_dataloader, val_dataloader, ks = [20,40,60], positional_encoding = True, dropout = 0.1, DEVICE='cuda:0'):
+def train_transformer(args, model, data_config, train_dataloader, val_dataloader, ks = [20,40,60], DEVICE='cuda:0'):
 
-    bert_model = get_model(pretrained_model_name=PRETRAINED_MODEL_NAME,
-                           model_config=MODEL_CONFIG,
-                           pretrained_checkpoint=PRETRAINED_MODEL_CHECKPOINT,
-                           num_embedding_layers=args.num_embedding_layers,
-                           strategy=args.strategy)
+    model = xavier_init(model)
 
+    model = model.to(DEVICE)
 
-    transformer = Seq2SeqTransformerWithNotes(num_encoder_layers = args.num_encoder_layers,
-                                              num_decoder_layers = args.num_decoder_layers,
-                                              emb_size = args.emb_size,
-                                              nhead = args.nhead,
-                                              src_vocab_size = data_config.source_vocab_size,
-                                              tgt_vocab_size = data_config.target_vocab_size,
-                                              use_positional_encoding_notes = args.use_positional_encoding_notes,
-                                              dim_feedforward = args.ffn_hid_dim,
-                                              dropout = dropout,
-                                              positional_encoding = positional_encoding,
-                                              bert = bert_model)
+    model = torch.compile(model)
 
-    for param in transformer.bert.parameters():
-        param.requires_grad = False
-
-    print(f'number of params: {sum(p.numel() for p in transformer.parameters())/1e6 :.2f}M', flush=True)
-
-    transformer = xavier_init(transformer)
-
-    transformer = transformer.to(DEVICE)
-
-    ddp_transformer = DDP(transformer, device_ids=[DEVICE])
+    ddp_transformer = DDP(model, device_ids=[DEVICE])
    
     loss_fn = torch.nn.CrossEntropyLoss(ignore_index= data_config.target_pad_id, label_smoothing = args.label_smoothing)
 
@@ -470,7 +464,7 @@ def train_transformer(args, data_config, train_dataloader, val_dataloader, ks = 
     for epoch in range(args.num_train_epochs):
         dist.barrier()
         # losses / len(train_dataloader), model, optimizer, scheduler
-        train_loss, ddp_transformer, optimizer, scheduler  = train_epoch_with_notes(ddp_transformer,
+        train_loss, ddp_transformer, optimizer, scheduler  = train_epoch_with_notes(args, ddp_transformer,
                                               optimizer,
                                                 [scheduler, args.scheduler],
                                                 train_dataloader, loss_fn, data_config.source_pad_id, data_config.target_pad_id, DEVICE)
@@ -540,10 +534,15 @@ if __name__ == '__main__':
 
     # Categorical distribution parameters
     parser.add_argument('--scheduler', type=str, default='CosineAnnealingWarmRestarts', choices=['ReduceLROnPlateau', 'CosineAnnealingWarmRestarts', 'WarmupStableDecay'], help='Type of scheduler')
+    parser.add_argument('--warmup_ratio', type=float, default = 0.6, help='Warmup ratio')
+    parser.add_argument('--stable_ratio', type=float, default = 0.1, help='Stable ratio')
+    parser.add_argument('--min_lr_ratio', type=float, default = 0.2, help='Minimum learning rate ratio')
 
-    # Quantized log uniform distribution parameters (handled as int for simplicity)
+    # Quantized log uniform distribution parameters (handled as int for simplicity) 
     parser.add_argument('--train_batch_size', type=int, default = 16, help='Training batch size (min 32, max 48)')
+    parser.add_argument('--mixed_precision', action='store_true', help='Use mixed precision training')
 
+    # project specific parameters
     parser.add_argument('--strategy', type=str, default ='concat',help='Strategy for embedding generation')
     parser.add_argument('--num_embedding_layers', type=int, default = 6, help='Number of layers to use for embedding generation')
     parser.add_argument('--predict_procedure', type=bool, default = False, help='Predict procedure codes')
@@ -552,12 +551,10 @@ if __name__ == '__main__':
     parser.add_argument('--use_positional_encoding_notes', type=str, default = 'False', help='Use positional encoding for notes')
     parser.add_argument('--eval_every', type=int, default = 1, help='Evaluate every n epochs')
     parser.add_argument('--ks', type=str, default = '20,40,60', help='Predict notes')
-    parser.add_argument('--warmup_ratio', type=float, default = 0.6, help='Warmup ratio')
-    parser.add_argument('--stable_ratio', type=float, default = 0.1, help='Stable ratio')
-    parser.add_argument('--min_lr_ratio', type=float, default = 0.2, help='Minimum learning rate ratio')
     parser.add_argument('--num_folds', type=int, default = 10, help='Number of folds for cross validation')
+    
     parser.add_argument('--seed', type=int, default = 21333, help='Seed for reproducibility')
-    #
+
     args = parser.parse_args()
     if args.use_positional_encoding_notes.lower() == 'true':
         args.use_positional_encoding_notes = True
@@ -567,6 +564,10 @@ if __name__ == '__main__':
         print('Not using positional encoding for notes')
 
     seed = enforce_reproducibility(seed = args.seed)
+
+    if args.mixed_precision:
+        torch.set_float32_matmul_precision('high')
+
 
     config = Config()
     data_config = DataConfig()
@@ -621,7 +622,33 @@ if __name__ == '__main__':
     cumulative_mapk = {f"test_map@{k}": 0.0 for k in ks}
     cumulative_recallk = {f"test_recall@{k}": 0.0 for k in ks}
 
+
+    bert_model = get_model(pretrained_model_name=PRETRAINED_MODEL_NAME,
+                           model_config=MODEL_CONFIG,
+                           pretrained_checkpoint=PRETRAINED_MODEL_CHECKPOINT,
+                           num_embedding_layers=args.num_embedding_layers,
+                           strategy=args.strategy)
+
+
+    transformer = Seq2SeqTransformerWithNotes(num_encoder_layers = args.num_encoder_layers,
+                                              num_decoder_layers = args.num_decoder_layers,
+                                              emb_size = args.emb_size,
+                                              nhead = args.nhead,
+                                              src_vocab_size = data_config.source_vocab_size,
+                                              tgt_vocab_size = data_config.target_vocab_size,
+                                              use_positional_encoding_notes = args.use_positional_encoding_notes,
+                                              dim_feedforward = args.ffn_hid_dim,
+                                              dropout = 0.1,
+                                              positional_encoding = True,
+                                              bert = bert_model)
+
+
+    for param in transformer.bert.parameters():
+        param.requires_grad = False
+
+
     if local_rank == 0:
+            print(f'number of params: {sum(p.numel() for p in transformer.parameters())/1e6 :.2f}M', flush=True)
             wandb.init(
                 # Set the project where this run will be logged
             project="PTF_SDP_D_NOTES_CROSS_VAL",
@@ -671,11 +698,12 @@ if __name__ == '__main__':
         
         try:
             test_mapk_cfv, test_recallk_cfv =  train_transformer(args,
-                                                                data_config=data_config,
-                                                                train_dataloader=train_dataloader,
-                                                                val_dataloader=val_dataloader,
-                                                                ks = ks,
-                                                                DEVICE=local_rank)
+                                                                 transformer,
+                                                                 data_config=data_config,
+                                                                 train_dataloader=train_dataloader,
+                                                                 val_dataloader=val_dataloader,
+                                                                 ks = ks,
+                                                                 DEVICE=local_rank)
             dist.barrier()
             if local_rank == 0:
                 for k in ks:
