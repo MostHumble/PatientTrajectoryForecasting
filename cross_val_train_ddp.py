@@ -365,7 +365,7 @@ def train_epoch_with_notes(args, model, optimizer, scheduler, train_dataloader,
                                                                                          DEVICE)
         del temp_enc
         if args.mixed_precision:
-            with torch.cuda.amp.autocast():
+            with torch.autocast(device_type=DEVICE, dtype=torch.bfloat16):
                 logits = model(src = source_input_ids,
                              trg = target_input_ids_,
                              src_mask = source_mask,
