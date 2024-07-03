@@ -365,7 +365,7 @@ def train_epoch_with_notes(args, model, optimizer, scheduler, train_dataloader,
                                                                                          DEVICE)
         del temp_enc
         if args.mixed_precision:
-            with torch.autocast(device_type=DEVICE, dtype=torch.bfloat16):
+            with torch.autocast(device_type=args.device_type, dtype=torch.bfloat16):
                 logits = model(src = source_input_ids,
                              trg = target_input_ids_,
                              src_mask = source_mask,
@@ -602,6 +602,8 @@ if __name__ == '__main__':
     source_sequences, target_sequences, source_tokens_to_ids, target_tokens_to_ids, _, __, hospital_ids_source = load_data(train_data_path['processed_data_path'],
                                                                                                                            processed_data = True,
                                                                                                                             reindexed = True)
+    
+    args.device_type = 'cuda' if torch.cuda.is_available() else 'cpu'
     
 
     data_config.source_vocab_size = ((len(source_tokens_to_ids) + 63) // 64) *64
