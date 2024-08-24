@@ -20,9 +20,17 @@ def get_k(sequence: List[int], k: int, spec_target_ids: torch.Tensor) -> List[in
     Returns:
         List[int]: The first `k` elements from `sequence` that are not present in `spec_target_ids`.
     """
-    return torch.tensor(sequence)[~torch.isin(torch.tensor(sequence), spec_target_ids)][:k].tolist()
+    return torch.tensor(sequence)[~torch.isin(torch.tensor(sequence), spec_target_ids)][
+        :k
+    ].tolist()
 
-def apk(relevant: List[int], forecasted: List[int], spec_target_ids: torch.Tensor = torch.tensor([0, 1, 2, 3, 4, 5]), k: int = 10) -> float:
+
+def apk(
+    relevant: List[int],
+    forecasted: List[int],
+    spec_target_ids: torch.Tensor = torch.tensor([0, 1, 2, 3, 4, 5]),
+    k: int = 10,
+) -> float:
     """
     Calculates the Average Precision at K (AP@K) metric for evaluating the performance of a forecasting model.
 
@@ -51,11 +59,11 @@ def apk(relevant: List[int], forecasted: List[int], spec_target_ids: torch.Tenso
 
     if num_hits == 0.0:
         return 0.0
-    
-    return sum_precision / num_hits 
+
+    return sum_precision / num_hits
 
 
-def mapk(relevant: List[List[int]], forecasted: List[List[int]], k :int = 10):
+def mapk(relevant: List[List[int]], forecasted: List[List[int]], k: int = 10):
     """
     Calculates the mean average precision at k (MAP@k) for a list of relevant and forecasted items.
 
@@ -67,7 +75,8 @@ def mapk(relevant: List[List[int]], forecasted: List[List[int]], k :int = 10):
     Returns:
         float: The mean average precision at k.
     """
-    return np_mean([apk(r, f, k = k) for r, f in zip(relevant, forecasted)])
+    return np_mean([apk(r, f, k=k) for r, f in zip(relevant, forecasted)])
+
 
 def recallTop(y_true, y_pred, rank=[20, 40, 60]):
     recall = list()
@@ -76,13 +85,20 @@ def recallTop(y_true, y_pred, rank=[20, 40, 60]):
         codes = y_true[i]
         tops = y_pred[i]
         for rk in rank:
-            predictions_at_k = len(set(codes).intersection(set(tops[:rk])))*1.0
-            thisOne.append(predictions_at_k/len(set(codes)))
-            recall.append( thisOne )
+            predictions_at_k = len(set(codes).intersection(set(tops[:rk]))) * 1.0
+            thisOne.append(predictions_at_k / len(set(codes)))
+            recall.append(thisOne)
     return (np.array(recall)).mean(axis=0).tolist()
 
-def get_sequences(model, dataloader : torch.utils.data.dataloader.DataLoader,  source_pad_id : int = 0,
-                   tgt_tokens_to_ids : Dict[str, int] =  None, max_len : int = 150,  DEVICE : str ='cuda:0'):
+
+def get_sequences(
+    model,
+    dataloader: torch.utils.data.dataloader.DataLoader,
+    source_pad_id: int = 0,
+    tgt_tokens_to_ids: Dict[str, int] = None,
+    max_len: int = 150,
+    DEVICE: str = "cuda:0",
+):
     """
     return relevant forcasted and sequences made by the model on the dataset.
 
@@ -101,21 +117,29 @@ def get_sequences(model, dataloader : torch.utils.data.dataloader.DataLoader,  s
     pred_trgs = []
     targets = []
     with torch.inference_mode():
-        for source_input_ids, target_input_ids in tqdm(dataloader, desc='scoring'):
+        for source_input_ids, target_input_ids in tqdm(dataloader, desc="scoring"):
             batch_pred_trgs = []
             batch_targets = []
-            source_input_ids, target_input_ids = source_input_ids.to(DEVICE),target_input_ids.to(DEVICE)
-            src_mask, source_padding_mask = create_source_mask(source_input_ids, source_pad_id, DEVICE) 
+            source_input_ids, target_input_ids = source_input_ids.to(
+                DEVICE
+            ), target_input_ids.to(DEVICE)
+            src_mask, source_padding_mask = create_source_mask(
+                source_input_ids, source_pad_id, DEVICE
+            )
             memory = model.batch_encode(source_input_ids, src_mask, source_padding_mask)
-            pred_trg = torch.tensor(tgt_tokens_to_ids['BOS'], device= DEVICE).repeat(source_input_ids.size(0)).unsqueeze(1)
+            pred_trg = (
+                torch.tensor(tgt_tokens_to_ids["BOS"], device=DEVICE)
+                .repeat(source_input_ids.size(0))
+                .unsqueeze(1)
+            )
             # generate target sequence one token at a time at batch level
             for i in range(max_len):
-                trg_mask = generate_square_subsequent_mask(i+1, DEVICE)
+                trg_mask = generate_square_subsequent_mask(i + 1, DEVICE)
                 output = model.decode(pred_trg, memory, trg_mask)
                 probs = model.generator(output[:, -1])
                 pred_tokens = torch.argmax(probs, dim=1)
                 pred_trg = torch.cat((pred_trg, pred_tokens.unsqueeze(1)), dim=1)
-                eov_mask = pred_tokens == tgt_tokens_to_ids['EOV']
+                eov_mask = pred_tokens == tgt_tokens_to_ids["EOV"]
 
                 if eov_mask.any():
                     # extend with sequences that have reached EOV
@@ -123,12 +147,12 @@ def get_sequences(model, dataloader : torch.utils.data.dataloader.DataLoader,  s
                     batch_targets.extend(target_input_ids[eov_mask].tolist())
                     # break if all have reached EOV
                     if eov_mask.all():
-                        break  
+                        break
                     # edit corresponding target sequences
                     target_input_ids = target_input_ids[~eov_mask]
                     pred_trg = pred_trg[~eov_mask]
                     memory = memory[~eov_mask]
-        
+
             # add elements that have never reached EOV
             if source_input_ids.size(0) != len(batch_pred_trgs):
                 batch_pred_trgs.extend(pred_trg.tolist())
@@ -138,7 +162,12 @@ def get_sequences(model, dataloader : torch.utils.data.dataloader.DataLoader,  s
     return pred_trgs, targets
 
 
-def get_random_stats(targets: List[List[int]], seq_len : int = 96, ks : List[int] = [20, 40, 60], num_runs_avg : int = 5):
+def get_random_stats(
+    targets: List[List[int]],
+    seq_len: int = 96,
+    ks: List[int] = [20, 40, 60],
+    num_runs_avg: int = 5,
+):
     """
     Returns the average MAP@k and Recall@k scores for a random forecasting model.
 
@@ -152,24 +181,34 @@ def get_random_stats(targets: List[List[int]], seq_len : int = 96, ks : List[int
     """
     # targets = [concated_dt[i]['target_sequences'].numpy().tolist() for i in range(len(concated_dt))]
     unique_targets = list(set([item for sublist in targets for item in sublist]))
-    
+
     cumulative_mapk = {f"test_map@{k}": 0.0 for k in ks}
     cumulative_recallk = {f"test_recall@{k}": 0.0 for k in ks}
-    
+
     for _ in range(num_runs_avg):
-        
-        forecasted = [np.random.choice(unique_targets, size=seq_len, replace=True).tolist() for _ in range(len(targets))]
-    
+
+        forecasted = [
+            np.random.choice(unique_targets, size=seq_len, replace=True).tolist()
+            for _ in range(len(targets))
+        ]
+
         run_mapk = {f"test_map@{k}": mapk(targets, forecasted, k) for k in ks}
-        run_recallk = {f"test_recall@{k}": recallTop(targets, forecasted, rank=[k])[0] for k in ks}
-    
+        run_recallk = {
+            f"test_recall@{k}": recallTop(targets, forecasted, rank=[k])[0] for k in ks
+        }
+
         # Accumulate results
         for k in ks:
             cumulative_mapk[f"test_map@{k}"] += run_mapk[f"test_map@{k}"]
             cumulative_recallk[f"test_recall@{k}"] += run_recallk[f"test_recall@{k}"]
-    
-    # Compute average results
-    average_mapk = {f"test_map@{k}": cumulative_mapk[f"test_map@{k}"] / num_runs_avg for k in ks}
-    average_recallk = {f"test_recall@{k}": cumulative_recallk[f"test_recall@{k}"] / num_runs_avg for k in ks}
 
-    return average_mapk, average_recallk    
+    # Compute average results
+    average_mapk = {
+        f"test_map@{k}": cumulative_mapk[f"test_map@{k}"] / num_runs_avg for k in ks
+    }
+    average_recallk = {
+        f"test_recall@{k}": cumulative_recallk[f"test_recall@{k}"] / num_runs_avg
+        for k in ks
+    }
+
+    return average_mapk, average_recallk

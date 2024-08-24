@@ -2,13 +2,16 @@ from collections import defaultdict
 from typing import Dict, List, Optional, Tuple, Union
 
 
-def list_tuples(x : List[List[int]], y : List[List[int]]) -> List[Tuple[List[int], List[int]]]:
+def list_tuples(
+    x: List[List[int]], y: List[List[int]]
+) -> List[Tuple[List[int], List[int]]]:
     pairs = []
-    for i, a in enumerate(zip(x,y)):
+    for i, a in enumerate(zip(x, y)):
         pairs.append(a)
     return pairs
 
-def prepare_for_tf(sequence : List[List[int]]) -> Tuple[List[List[int]]]:
+
+def prepare_for_tf(sequence: List[List[int]]) -> Tuple[List[List[int]]]:
     """
     Prepares the input sequence for trajectory forecasting training by creating pairs of input and output sequences.
 
@@ -20,24 +23,26 @@ def prepare_for_tf(sequence : List[List[int]]) -> Tuple[List[List[int]]]:
     """
     X, y, pairs = list(), list(), list()
     for i in range(len(sequence) - 1):
-        X.append(sequence[:i+1])
-        y.append(sequence[i+1:])
+        X.append(sequence[: i + 1])
+        y.append(sequence[i + 1 :])
 
     pairs = list_tuples(X, y)
     return pairs
 
-def get_hadm_ids_for_strategy(subject_id_hadm_map, strategy = 'SDP'):
+
+def get_hadm_ids_for_strategy(subject_id_hadm_map, strategy="SDP"):
     """
     Get the hospital admission ids for the specified strategy.
     """
     notes_hadm_ids = []
-    if strategy == 'SDP':
+    if strategy == "SDP":
         for hadm_list in subject_id_hadm_map.values():
-            for i in range(len(hadm_list)-1):
-                notes_hadm_ids.extend([hadm_list[:i+1]])
-    elif strategy == 'TF':
+            for i in range(len(hadm_list) - 1):
+                notes_hadm_ids.extend([hadm_list[: i + 1]])
+    elif strategy == "TF":
         raise NotImplementedError
     return notes_hadm_ids
+
 
 def prepare_for_sdp(sequence: List[List[int]]):
     """
@@ -50,18 +55,19 @@ def prepare_for_sdp(sequence: List[List[int]]):
         list: A list of pairs containing the input sequence and the corresponding target sequence.
 
     """
-    
+
     X, y, pairs = list(), list(), list()
     for i in range(len(sequence) - 1):
-        X.append(sequence[:i+1])
-        y.append([sequence[i+1]])
-        
+        X.append(sequence[: i + 1])
+        y.append([sequence[i + 1]])
+
     pairs = list_tuples(X, y)
     return pairs
 
 
-
-def format_data(sequences : List[List[List[int]]],  strategy : Optional[str] = 'TF') -> List[Tuple[List[int], List[int]]]:
+def format_data(
+    sequences: List[List[List[int]]], strategy: Optional[str] = "TF"
+) -> List[Tuple[List[int], List[int]]]:
     """
     Formats the original sequences based on the specified data format.
 
@@ -74,19 +80,22 @@ def format_data(sequences : List[List[List[int]]],  strategy : Optional[str] = '
     """
 
     source_target_sequences = []
-    
+
     for i in range(len(sequences)):
         # Trajectory forecasting (TF): predict until the end of EOH
-        if strategy == 'TF':
+        if strategy == "TF":
             source_target_sequences.extend(prepare_for_tf(sequences[i]))
         # Sequential disease prediction (SDP): predict until the next visit
-        elif strategy == 'SDP':
+        elif strategy == "SDP":
             source_target_sequences.extend(prepare_for_sdp(sequences[i]))
         else:
-            raise Exception('Wrong strategy, must choose either TF, SDP')
+            raise Exception("Wrong strategy, must choose either TF, SDP")
     return source_target_sequences
 
-def reset_integer_output(source_target_sequences: List[List[int]]) -> Tuple[List[List[int]], Dict[int, int]]:
+
+def reset_integer_output(
+    source_target_sequences: List[List[int]],
+) -> Tuple[List[List[int]], Dict[int, int]]:
     """
     Resets the integer output codes in the given sequence of pairs.
 
@@ -98,7 +107,9 @@ def reset_integer_output(source_target_sequences: List[List[int]]) -> Tuple[List
     """
     updated_source_target_sequences = []
     # keep same ids for special tokens
-    old_to_new_map = defaultdict(lambda: len(old_to_new_map), {0: 0, 1: 1, 2: 2, 3: 3, 4: 4, 5: 5})
+    old_to_new_map = defaultdict(
+        lambda: len(old_to_new_map), {0: 0, 1: 1, 2: 2, 3: 3, 4: 4, 5: 5}
+    )
 
     for pair in source_target_sequences:
         list_of_visits = []
@@ -108,13 +119,17 @@ def reset_integer_output(source_target_sequences: List[List[int]]) -> Tuple[List
                 updated_target_visit.append(old_to_new_map[code])
             list_of_visits.append(updated_target_visit)
         updated_source_target_sequences.append((pair[0], list_of_visits))
-        
+
     return updated_source_target_sequences, dict(old_to_new_map)
 
 
-def filter_codes(source_target_sequences : List[Tuple[List[List[int]], List[List[int]]]], ids_to_types_map: Dict[int, str],\
-                  procedure : bool = False , drugs : bool = False, reset_target_map : bool = False)\
-    -> Tuple[Tuple[List[List[int]]], Union[Dict[int, int]], None] :
+def filter_codes(
+    source_target_sequences: List[Tuple[List[List[int]], List[List[int]]]],
+    ids_to_types_map: Dict[int, str],
+    procedure: bool = False,
+    drugs: bool = False,
+    reset_target_map: bool = False,
+) -> Tuple[Tuple[List[List[int]]], Union[Dict[int, int]], None]:
     """
     Filters the codes of target sequences to remove indicated types, and flattens both sequnces.
 
@@ -127,7 +142,7 @@ def filter_codes(source_target_sequences : List[Tuple[List[List[int]], List[List
 
     Returns:
     - updated_source_target_sequences (list): List of updated pairs containing the special tokens, and flattend
-    - old_to_new_map (dict): a mapping of the old to new codes for the target sequences. 
+    - old_to_new_map (dict): a mapping of the old to new codes for the target sequences.
     """
 
     updated_source_target_sequences = []
@@ -139,49 +154,58 @@ def filter_codes(source_target_sequences : List[Tuple[List[List[int]], List[List
             for target_visit in pair[1]:
                 updated_target_visit = []
                 for code in target_visit:
-                    if not (ids_to_types_map[code] == 'P' or ids_to_types_map[code] == 'DR'):
+                    if not (
+                        ids_to_types_map[code] == "P" or ids_to_types_map[code] == "DR"
+                    ):
                         updated_target_visit.append(code)
                 list_of_target_visits.append(updated_target_visit)
             updated_source_target_sequences.append((pair[0], list_of_target_visits))
-            
 
-    if drugs and not(procedure):
+    if drugs and not (procedure):
         print("\nOnly removing drug codes from target sequences")
         for pair in source_target_sequences:
             list_of_target_visits = []
             for target_visit in pair[1]:
                 updated_target_visit = []
                 for code in target_visit:
-                    if not (ids_to_types_map[code] == 'DR'):
+                    if not (ids_to_types_map[code] == "DR"):
                         updated_target_visit.append(code)
                 list_of_target_visits.append(updated_target_visit)
             updated_source_target_sequences.append((pair[0], list_of_target_visits))
 
-    if not(drugs) and procedure:
+    if not (drugs) and procedure:
         print("\Only removing procedure codes from target sequences")
         for pair in source_target_sequences:
             list_of_target_visits = []
             for target_visit in pair[1]:
                 updated_target_visit = []
                 for code in target_visit:
-                    if not (ids_to_types_map[code] == 'P'):
+                    if not (ids_to_types_map[code] == "P"):
                         updated_target_visit.append(code)
                 list_of_target_visits.append(updated_target_visit)
             updated_source_target_sequences.append((pair[0], list_of_target_visits))
 
-    if not(procedure) and not(drugs):
+    if not (procedure) and not (drugs):
         print("\nkeeping all codes")
         updated_source_target_sequences = source_target_sequences.copy()
-    
+
     if reset_target_map:
-        updated_source_target_sequences, old_to_new_map = reset_integer_output(updated_source_target_sequences)
+        updated_source_target_sequences, old_to_new_map = reset_integer_output(
+            updated_source_target_sequences
+        )
         return updated_source_target_sequences, old_to_new_map
 
     return updated_source_target_sequences, None
 
-def prepare_sequences(source_target_sequences: List[Tuple[List[int], List[int]]], tokens_to_ids_map: Dict[str, int], truncate : Optional[bool] = False,
-                       pad: Optional[bool] = False, input_max_length: Optional[int] = None ,
-                        target_max_length: Optional[int] = None ) -> Tuple[List[List[int]], List[List[int]]]:
+
+def prepare_sequences(
+    source_target_sequences: List[Tuple[List[int], List[int]]],
+    tokens_to_ids_map: Dict[str, int],
+    truncate: Optional[bool] = False,
+    pad: Optional[bool] = False,
+    input_max_length: Optional[int] = None,
+    target_max_length: Optional[int] = None,
+) -> Tuple[List[List[int]], List[List[int]]]:
     """
     Adds special tokens to the input and output sequences in the given list of pairs.
 
@@ -196,7 +220,7 @@ def prepare_sequences(source_target_sequences: List[Tuple[List[int], List[int]]]
     Returns:
         Tuple[List[List[int]], List[List[int]]]: Lists of formated source and target sequences.
     """
-    
+
     updated_source_sequences = []
     updated_target_sequences = []
 
@@ -204,31 +228,49 @@ def prepare_sequences(source_target_sequences: List[Tuple[List[int], List[int]]]
         input_sequence_spec, output_sequence_spec = [], []
         # Adding special tokens to input sequence
         for input_sequence in input_sequences:
-            input_sequence =  [tokens_to_ids_map['BOV']] + input_sequence + [tokens_to_ids_map['EOV']]
+            input_sequence = (
+                [tokens_to_ids_map["BOV"]] + input_sequence + [tokens_to_ids_map["EOV"]]
+            )
             input_sequence_spec.extend(input_sequence)
-        input_sequence_spec = [tokens_to_ids_map['BOH']] + input_sequence_spec + [tokens_to_ids_map['EOH']]                   
-        
+        input_sequence_spec = (
+            [tokens_to_ids_map["BOH"]]
+            + input_sequence_spec
+            + [tokens_to_ids_map["EOH"]]
+        )
+
         # Adding special tokens to output sequence
         for output_sequence in output_sequences:
-            output_sequence =  [tokens_to_ids_map['BOV']] + output_sequence + [tokens_to_ids_map['EOV']] 
+            output_sequence = (
+                [tokens_to_ids_map["BOV"]]
+                + output_sequence
+                + [tokens_to_ids_map["EOV"]]
+            )
             output_sequence_spec.extend(output_sequence)
-        output_sequence_spec = [tokens_to_ids_map['BOS']] + output_sequence_spec + [tokens_to_ids_map['EOH']]
-            
+        output_sequence_spec = (
+            [tokens_to_ids_map["BOS"]]
+            + output_sequence_spec
+            + [tokens_to_ids_map["EOH"]]
+        )
+
         # Truncate or pad input sequence
         if input_max_length is not None:
             if truncate:
                 input_sequence_spec = input_sequence_spec[:input_max_length]
             if pad:
-                input_sequence_spec += [tokens_to_ids_map['PAD']] * (input_max_length - len(input_sequence_spec))
-        
+                input_sequence_spec += [tokens_to_ids_map["PAD"]] * (
+                    input_max_length - len(input_sequence_spec)
+                )
+
         # Truncate or pad output sequence
         if target_max_length is not None:
             if truncate:
                 output_sequence_spec = output_sequence_spec[:target_max_length]
             if pad:
-                output_sequence_spec += [tokens_to_ids_map['PAD']] * (target_max_length - len(output_sequence_spec))
-        
+                output_sequence_spec += [tokens_to_ids_map["PAD"]] * (
+                    target_max_length - len(output_sequence_spec)
+                )
+
         updated_source_sequences.append(input_sequence_spec)
         updated_target_sequences.append(output_sequence_spec)
-        
+
     return updated_source_sequences, updated_target_sequences
