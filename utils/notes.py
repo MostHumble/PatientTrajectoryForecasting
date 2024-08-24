@@ -1,9 +1,7 @@
 import pandas
-from tqdm.auto import tqdm 
 import os
 import re 
 from transformers import (
-    AutoModelForMaskedLM,
     BertTokenizer )
 import pandas as pd
 from datasets import Dataset
@@ -236,7 +234,7 @@ def is_inline_title(text):
         return False
     return is_title(m.groups()[0])
 
-stopwords = set(['of', 'on', 'or'])
+stopwords = set('of', 'on', 'or')
 def is_title(text):
     if not text.endswith(':'):
         return False
@@ -247,16 +245,13 @@ def is_title(text):
 
     # Are all non-stopwords capitalized?
     for word in text.split():
-        if word in stopwords: continue
+        if word in stopwords:
+            continue
         if not word[0].isupper():
             return False
 
     # I noticed this is a common issue (non-title aapears at beginning of line)
-    if text == 'Disp':
-        return False
-
-    # optionally: could assert that it is less than 6 tokens
-    return True
+    return (text == 'Disp')
 
 def sent_tokenize_rules(text):
 
@@ -442,7 +437,8 @@ def sent_tokenize_rules(text):
             if (i == N-1) or is_title(segments[i+1]):
                 new_segments = new_segments[:-1]
                 new_segments.append(segments[i-1] + ' ' + segments[i])
-            else: new_segments.append(segments[i])
+            else:
+                new_segments.append(segments[i])
             # currently If the code sees a segment that doesn't have any new lines and the prior line is a title 
             # *but* it is not the last segment and the next segment is not a title then that segment is just dropped
             # so lists that have a title header will lose their first entry

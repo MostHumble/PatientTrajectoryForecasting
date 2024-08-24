@@ -5,20 +5,17 @@ import math
 import random
 from itertools import chain
 from pathlib import Path
-from functools import partial
 from tqdm import tqdm
 import os
 import torch
-import triton
 import transformers
 import evaluate
 
 import datasets
 from datasets import load_dataset
 from torch.utils.data import DataLoader
-from accelerate import Accelerator, DistributedType
+from accelerate import Accelerator
 from accelerate.logging import get_logger
-from accelerate.utils import set_seed
 from transformers.models.bert.configuration_bert import BertConfig
 from transformers.optimization import get_wsd_schedule
 from huggingface_hub import HfApi
@@ -35,9 +32,7 @@ from transformers import (
 
 
 from utils.notes import (
-    _tokenize_function,
-    prepare_sequences,
-    preprocess_logits_for_metrics
+    prepare_sequences
 )
 
 

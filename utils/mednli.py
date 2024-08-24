@@ -20,7 +20,6 @@ def compute_metrics(preds : List[int], labels: List[int]):
         'recall': recall
     }
 
-from typing import List
 def evaluate_model(model, dataloader, bin_lens:List[int] = None, tokenizer = None, device = 'cuda'):
 
     """

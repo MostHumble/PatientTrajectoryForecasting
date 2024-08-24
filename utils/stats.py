@@ -15,35 +15,32 @@ def stats(Pairs : List[Tuple[List[List[int]]]], is_torch: bool = False) -> Union
     Returns:
         bool: True if any pair in the list has a length greater than max_length, False otherwise.
     """
-    if is_torch:
-        return max(x), max(y)
-    else :
-        x, y = [], []
-        for (source_sequence,  target_sequence) in Pairs:
-            x.append(len(source_sequence))
-            y.append(len(target_sequence))
+    x, y = [], []
+    for (source_sequence,  target_sequence) in Pairs:
+        x.append(len(source_sequence))
+        y.append(len(target_sequence))
 
 
-        # Calculating statistics
-        mean_source = statistics.mean(x)
-        mean_target = statistics.mean(y)
-        std_source = statistics.stdev(x)
-        std_target = statistics.stdev(y)
+    # Calculating statistics
+    mean_source = statistics.mean(x)
+    mean_target = statistics.mean(y)
+    std_source = statistics.stdev(x)
+    std_target = statistics.stdev(y)
 
-        print("\nStatistics of the input and output data:")
-        print(f"\nMean sequence length of source sequences : {mean_source:.2f} ± {std_source:.2f}")
-        print(f"Mean sequence length of target sequences : {mean_target:.2f} ± {std_target:.2f}")
+    print("\nStatistics of the input and output data:")
+    print(f"\nMean sequence length of source sequences : {mean_source:.2f} ± {std_source:.2f}")
+    print(f"Mean sequence length of target sequences : {mean_target:.2f} ± {std_target:.2f}")
 
-        # Plotting distribution of lengths
-        plt.figure(figsize = (10, 5))
-        plt.hist([x, y], bins = 30, color=['blue', 'green'], label = ['source sequences', 'target sequences'])
-        plt.title('Distribution of Sequence Lengths')
-        plt.xlabel('Sequence Length')
-        plt.ylabel('Frequency')
-        plt.legend()
-        plt.grid(True)
-        plt.show()
-        return x,y
+    # Plotting distribution of lengths
+    plt.figure(figsize = (10, 5))
+    plt.hist([x, y], bins = 30, color=['blue', 'green'], label = ['source sequences', 'target sequences'])
+    plt.title('Distribution of Sequence Lengths')
+    plt.xlabel('Sequence Length')
+    plt.ylabel('Frequency')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+    return x,y
         
     
     

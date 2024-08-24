@@ -54,7 +54,7 @@ from transformers.models.bert.modeling_bert import BertPreTrainedModel
 try:
     import flash_attn_triton as flash_attn_triton
     flash_attn_qkvpacked_func = flash_attn_triton.flash_attn_qkvpacked_func
-except ImportError as e:
+except ImportError:
     flash_attn_qkvpacked_func = None
 
 logger = logging.getLogger(__name__)

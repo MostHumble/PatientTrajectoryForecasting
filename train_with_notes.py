@@ -299,7 +299,6 @@ def xavier_init(transformer):
                 nn.init.xavier_uniform_(p)
     
     return transformer
-from typing import List
 def train_epoch_with_notes(model, scheduler , optimizer, train_dataloader, loss_fn, source_pad_id = 0, target_pad_id = 0, DEVICE='cuda:0', non_pad_token = 42):
     
     losses = 0

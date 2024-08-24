@@ -1,12 +1,10 @@
 from dataclasses import dataclass, asdict
-import yaml
 import torch
 import torch.nn as nn
 import torch.optim.lr_scheduler as lr_scheduler
 from utils.train import train_epoch, evaluate, get_data_loaders
 import wandb
 import argparse
-import os
 from model import Seq2SeqTransformer, Seq2SeqTransformerWithNotes
 from utils.eval import mapk, get_sequences
 import warnings
@@ -54,7 +52,6 @@ class Config:
     gamma : float = 0.1
 
     
-from torch.nn.parallel import DistributedDataParallel as DDP
 
 def train_transformer(config, data_config, train_dataloader, val_dataloader, ks = [20,40,72], positional_encoding = True, dropout = 0.1, with_notes = False):
 

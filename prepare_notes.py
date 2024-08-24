@@ -1,14 +1,8 @@
 import pandas as pd
-import sys
 import spacy
 import re
 import time
-import scispacy
-from tqdm import tqdm
 from utils.notes import sent_tokenize_rules, TextPreprocessor
-from tqdm.notebook import tqdm #else tqdm doens't seem to work
-import numpy as np
-import dask.dataframe as dd
 import os
 import warnings
 from pandarallel import pandarallel
@@ -77,7 +71,7 @@ def process_note(note):
         ps = pd.DataFrame(ps)
         ps.apply(get_sentences, args=(note,), axis=1)
         return note 
-    except Exception as e:
+    except Exception:
         pass
         #print ('error', e)
         
@@ -136,12 +130,12 @@ if __name__ == '__main__':
                 text = text_preprocessor(text)
             except TypeError as e:
             # doing this because found some nan values in the notes
-                if str(e) == "expected string or bytes-like object" and type(text) == float:
+                if str(e) == "expected string or bytes-like object" and isinstance(text, float):
                     continue
                 else:
                     raise         
                     
-            if text != None and len(text) != 0 :
+            if text is not None and len(text) != 0 :
                 f.write(text)
                 f.write('\n')
     

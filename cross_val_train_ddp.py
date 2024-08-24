@@ -582,7 +582,8 @@ if __name__ == '__main__':
 
     setup(rank, world_size)
     
-    if rank == 0: print(f"Group initialized? {dist.is_initialized()}", flush=True)
+    if rank == 0:
+        print(f"Group initialized? {dist.is_initialized()}", flush=True)
 
     local_rank = int(os.environ['SLURM_LOCALID'])
 

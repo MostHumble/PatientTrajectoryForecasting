@@ -1,0 +1,3 @@
+[tool.ruff]
+
+extend-select = ["I"]

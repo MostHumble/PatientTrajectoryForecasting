@@ -1,5 +1,4 @@
 from typing import Optional
-import torch.nn as nn
 import torch
 from utils.bert_layers_mosa import BertModel
 from transformers import BertPreTrainedModel
