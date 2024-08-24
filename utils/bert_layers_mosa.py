@@ -44,12 +44,13 @@ from typing import List, Optional, Tuple, Union
 # Add folder root to path to allow us to use relative imports regardless of what directory the script is run from
 sys.path.append(os.path.dirname(os.path.realpath(__file__)))
 
-import utils.bert_padding as bert_padding_module
 import torch
 import torch.nn as nn
 from einops import rearrange
 from transformers.activations import ACT2FN
 from transformers.models.bert.modeling_bert import BertPreTrainedModel
+
+import utils.bert_padding as bert_padding_module
 
 try:
     import flash_attn_triton as flash_attn_triton

@@ -1,7 +1,9 @@
-import matplotlib.pyplot as plt
 import statistics
-from typing import Union, Tuple, List
+from typing import List, Tuple, Union
+
+import matplotlib.pyplot as plt
 import numpy as np
+
 
 def stats(Pairs : List[Tuple[List[List[int]]]], is_torch: bool = False) -> Union[Tuple[List[int], List[int]], Tuple[int, int]] :
     """

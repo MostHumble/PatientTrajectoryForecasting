@@ -1,11 +1,12 @@
-import pandas
 import os
-import re 
-from transformers import (
-    BertTokenizer )
+import pickle
+import re
+
+import pandas
 import pandas as pd
 from datasets import Dataset
-import pickle
+from transformers import BertTokenizer
+
 
 class TextPreprocessor:
     def __init__(

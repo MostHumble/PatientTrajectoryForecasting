@@ -1,4 +1,5 @@
-from typing import List, Dict, Tuple
+from typing import Dict, List, Tuple
+
 
 def test_build_data_wnotes(subjects_visits_sequences: List[List[List[int]]], subject_id_hadm_id_map_notes: Dict[int, List[int]]):
     print(f'len(subjects_visits_sequences): {len(subjects_visits_sequences)}, len(subject_id_hadm_id_map_notes): {len(subject_id_hadm_id_map_notes)}')

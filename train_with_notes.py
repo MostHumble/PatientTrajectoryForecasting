@@ -1,29 +1,32 @@
+import argparse
+import os
 from dataclasses import dataclass
-import yaml
+from typing import Dict, Optional
+
 import torch
 import torch.nn as nn
 import torch.optim.lr_scheduler as lr_scheduler
-from utils.train import WarmupStableDecay
 import wandb
-import argparse
-import os
-from model import  Seq2SeqTransformerWithNotes
-from utils.eval import mapk, recallTop
-from transformers import AutoConfig
-from utils.bert_embeddings import MosaicBertForEmbeddingGeneration
-from transformers.models.bert.configuration_bert import BertConfig
-from tqdm import tqdm 
-from datasets import  load_from_disk
+import yaml
+from datasets import load_from_disk
 from torch.utils.data import DataLoader, Dataset
-from utils.train import create_mask, generate_square_subsequent_mask, create_source_mask
-from typing import Dict, Optional
-from utils.utils import (
-    load_data,
-    get_paths,
+from tqdm import tqdm
+from transformers import AutoConfig
+from transformers.models.bert.configuration_bert import BertConfig
+
+from model import Seq2SeqTransformerWithNotes
+from utils.bert_embeddings import MosaicBertForEmbeddingGeneration
+from utils.eval import mapk, recallTop
+from utils.train import (
+    WarmupStableDecay,
+    create_mask,
+    create_source_mask,
+    generate_square_subsequent_mask,
 )
-
-
-
+from utils.utils import (
+    get_paths,
+    load_data,
+)
 
 
 @dataclass

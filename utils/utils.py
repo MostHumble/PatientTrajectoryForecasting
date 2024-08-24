@@ -1,6 +1,7 @@
-import os 
+import os
 import pickle
-from typing import Dict, Tuple, List
+from typing import Dict, List, Tuple
+
 
 def load_data(path: str = 'outputData/originalData/' , updated_ids_to_types : bool = False,
                train : bool = False, processed_data : bool = False, with_notes : bool = False, reindexed : bool = False) -> Tuple[List[List[List[int]]], Dict[str, int], Dict[str, int], Dict[int, str]]:

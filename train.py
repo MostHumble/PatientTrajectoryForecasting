@@ -1,13 +1,16 @@
-from dataclasses import dataclass, asdict
+import argparse
+import warnings
+from dataclasses import asdict, dataclass
+
 import torch
 import torch.nn as nn
 import torch.optim.lr_scheduler as lr_scheduler
-from utils.train import train_epoch, evaluate, get_data_loaders
 import wandb
-import argparse
+
 from model import Seq2SeqTransformer, Seq2SeqTransformerWithNotes
-from utils.eval import mapk, get_sequences
-import warnings
+from utils.eval import get_sequences, mapk
+from utils.train import evaluate, get_data_loaders, train_epoch
+
 # currently getting warnings because of mask datatypes, you might wanna change this not installing from environment.yml
 warnings.filterwarnings("ignore") 
 

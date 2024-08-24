@@ -1,8 +1,10 @@
 # helper Module to convert tensor of input indices into corresponding tensor of token embeddings
 import math
+
 import torch
 import torch.nn as nn
 from torch.nn import Transformer
+
 
 class PositionalEncoding(nn.Module):
     def __init__(self,

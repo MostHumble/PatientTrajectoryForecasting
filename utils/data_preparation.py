@@ -1,13 +1,15 @@
-import os
-import gzip
-import pickle
-import pandas as pd
-from collections import defaultdict, Counter
-from typing import Dict, Optional, Tuple, List, Set
-from itertools import takewhile, chain
-from concurrent.futures import ThreadPoolExecutor
-import statistics
 import asyncio
+import gzip
+import os
+import pickle
+import statistics
+from collections import Counter, defaultdict
+from concurrent.futures import ThreadPoolExecutor
+from itertools import chain, takewhile
+from typing import Dict, List, Optional, Set, Tuple
+
+import pandas as pd
+
 
 def get_drugs_from_mimic_file(fileName :str, choice : str) -> Tuple[Dict[str, str], Dict[int, list]]:
     """

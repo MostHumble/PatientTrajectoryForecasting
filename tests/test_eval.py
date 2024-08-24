@@ -1,7 +1,9 @@
-from typing import List, Dict
-from torch import Tensor
-from torch.utils.data import DataLoader 
 from dataclasses import dataclass
+from typing import Dict, List
+
+from torch import Tensor
+from torch.utils.data import DataLoader
+
 
 def test_get_sequences(pred_trgs : List[List[int]], targets : List[List[int]],
                         source_input_ids : Tensor, test_dataloader : DataLoader,

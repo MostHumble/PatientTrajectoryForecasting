@@ -1,9 +1,12 @@
-import torch
-from tqdm import tqdm
-from utils.train import create_source_mask, generate_square_subsequent_mask
-from typing import List, Dict
-from numpy import mean as np_mean
+from typing import Dict, List
+
 import numpy as np
+import torch
+from numpy import mean as np_mean
+from tqdm import tqdm
+
+from utils.train import create_source_mask, generate_square_subsequent_mask
+
 
 def get_k(sequence: List[int], k: int, spec_target_ids: torch.Tensor) -> List[int]:
     """

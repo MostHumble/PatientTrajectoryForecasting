@@ -1,33 +1,36 @@
+import argparse
+import logging
+import os
 from dataclasses import dataclass
-import yaml
+from socket import gethostname
+from typing import Dict, Optional
+
 import torch
+import torch.distributed as dist
 import torch.nn as nn
 import torch.optim.lr_scheduler as lr_scheduler
 import wandb
-import argparse
-import os
-from model import  Seq2SeqTransformerWithNotes
-from utils.eval import mapk, recallTop
-import torch.distributed as dist
+import yaml
+from datasets import load_from_disk
 from torch.nn.parallel import DistributedDataParallel as DDP
-from transformers import AutoConfig
-from utils.bert_embeddings import MosaicBertForEmbeddingGeneration
-from transformers.models.bert.configuration_bert import BertConfig
-from tqdm import tqdm 
-from datasets import  load_from_disk
 from torch.utils.data import DataLoader, Dataset
-from utils.train import create_mask, generate_square_subsequent_mask, create_source_mask
-from typing import Dict, Optional
-from socket import gethostname
-from utils.train import WarmupStableDecay
-from utils.utils import (
-    load_data,
-    get_paths,
+from tqdm import tqdm
+from transformers import AutoConfig
+from transformers.models.bert.configuration_bert import BertConfig
+
+from model import Seq2SeqTransformerWithNotes
+from utils.bert_embeddings import MosaicBertForEmbeddingGeneration
+from utils.eval import mapk, recallTop
+from utils.train import (
+    WarmupStableDecay,
+    create_mask,
+    create_source_mask,
+    generate_square_subsequent_mask,
 )
-import logging
-
-
-
+from utils.utils import (
+    get_paths,
+    load_data,
+)
 
 # currently getting warnings because of mask datatypes, you might wanna change this not installing from environment.yml
 

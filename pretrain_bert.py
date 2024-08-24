@@ -2,39 +2,32 @@ import argparse
 import json
 import logging
 import math
+import os
 import random
 from itertools import chain
 from pathlib import Path
-from tqdm import tqdm
-import os
-import torch
-import transformers
-import evaluate
 
 import datasets
-from datasets import load_dataset
-from torch.utils.data import DataLoader
+import evaluate
+import torch
+import transformers
 from accelerate import Accelerator
 from accelerate.logging import get_logger
-from transformers.models.bert.configuration_bert import BertConfig
-from transformers.optimization import get_wsd_schedule
+from datasets import load_dataset
 from huggingface_hub import HfApi
 from torch.optim import AdamW
-
-
-
+from torch.utils.data import DataLoader
+from tqdm import tqdm
 from transformers import (
     AutoModelForMaskedLM,
     BertTokenizer,
     DataCollatorForLanguageModeling,
-    SchedulerType
-    )
-
-
-from utils.notes import (
-    prepare_sequences
+    SchedulerType,
 )
+from transformers.models.bert.configuration_bert import BertConfig
+from transformers.optimization import get_wsd_schedule
 
+from utils.notes import prepare_sequences
 
 logger = get_logger(__name__)
 

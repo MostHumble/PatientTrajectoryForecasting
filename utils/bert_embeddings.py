@@ -1,9 +1,11 @@
-from typing import Optional
-import torch
-from utils.bert_layers_mosa import BertModel
-from transformers import BertPreTrainedModel
-from torch.nn.modules.utils import consume_prefix_in_state_dict_if_present
 import logging
+from typing import Optional
+
+import torch
+from torch.nn.modules.utils import consume_prefix_in_state_dict_if_present
+from transformers import BertPreTrainedModel
+
+from utils.bert_layers_mosa import BertModel
 
 logger = logging.getLogger(__name__)
 

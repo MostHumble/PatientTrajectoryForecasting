@@ -1,13 +1,16 @@
-import pandas as pd
-import spacy
+import argparse
+import os
 import re
 import time
-from utils.notes import sent_tokenize_rules, TextPreprocessor
-import os
 import warnings
+
+import pandas as pd
+import spacy
 from pandarallel import pandarallel
 from spacy.language import Language
-import argparse
+
+from utils.notes import TextPreprocessor, sent_tokenize_rules
+
 # Disable warnings
 warnings.filterwarnings('ignore')
 

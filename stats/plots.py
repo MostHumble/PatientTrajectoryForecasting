@@ -1,7 +1,8 @@
-import matplotlib.pyplot as plt
 from collections import Counter
-from matplotlib.ticker import MaxNLocator
+
+import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.ticker import MaxNLocator
 
 
 def get_admission_stats(subject_id_adm_map, num_visits=15):

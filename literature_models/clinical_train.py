@@ -1,21 +1,21 @@
-import yaml
-from tqdm import tqdm 
-from datasets import  load_from_disk
-from typing import Tuple, List
-from torch.utils.data import DataLoader, Dataset
-from PatientTrajectoryForecasting.utils.utils import (
-    load_data,
-    get_paths,
-)
-import torch.nn as nn
-import torch
-import os
-
-from Clinical_GAN.models import Encoder, Decoder, Generator, Discriminator
-from torch.optim.lr_scheduler import _LRScheduler
 import itertools
-import torch.nn.functional as F
 import logging
+import os
+from typing import List, Tuple
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import yaml
+from Clinical_GAN.models import Decoder, Discriminator, Encoder, Generator
+from datasets import load_from_disk
+from PatientTrajectoryForecasting.utils.utils import (
+    get_paths,
+    load_data,
+)
+from torch.optim.lr_scheduler import _LRScheduler
+from torch.utils.data import DataLoader, Dataset
+from tqdm import tqdm
 
 
 class FindLR(_LRScheduler):
