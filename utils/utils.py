@@ -1,6 +1,6 @@
 import os 
 import pickle
-from typing import Dict, Tuple, List, Optional
+from typing import Dict, Tuple, List
 
 def load_data(path: str = 'outputData/originalData/' , updated_ids_to_types : bool = False,
                train : bool = False, processed_data : bool = False, with_notes : bool = False, reindexed : bool = False) -> Tuple[List[List[List[int]]], Dict[str, int], Dict[str, int], Dict[int, str]]:
@@ -44,32 +44,38 @@ def load_data(path: str = 'outputData/originalData/' , updated_ids_to_types : bo
 
             try: 
                 old_to_new_ids_source = pickle.load(open(os.path.join(path, 'old_to_new_ids_source.pkl'), 'rb'))
-            except:
-                print(f"old_to_new_ids_source file not availble, mapping is the same as the old one")
+            except Exception as e:
+                print('old_to_new_ids_source.pkl not found', e)
+                print("old_to_new_ids_source file not availble, mapping is the same as the old one")
                 old_to_new_ids_source = None
 
             try:
                 old_to_new_ids_target = pickle.load(open(os.path.join(path, 'old_to_new_ids_target.pkl'), 'rb'))
-            except:
-                print(f"new_to_old_ids_target file not availble, mapping is the same as the old one")
+            except Exception as e:
+                print('old_to_new_ids_target.pkl not found', e)
+                print("new_to_old_ids_target file not availble, mapping is the same as the old one")
                 old_to_new_ids_target = None
             try:
                 source_tokens_to_ids = pickle.load(open(os.path.join(path, 'source_tokens_to_ids.pkl'), 'rb'))
-            except:
+            except Exception as e:
+                print('source_tokens_to_ids.pkl not found', e)
                 source_tokens_to_ids = None
             try:
                 target_tokens_to_ids = pickle.load(open(os.path.join(path, 'target_tokens_to_ids.pkl'), 'rb'))
-            except:
+            except Exception as e:
+                print('target_tokens_to_ids.pkl not found', e)
                 target_tokens_to_ids = None
             if reindexed:
                 try:
                     hospital_ids_source = pickle.load(open(os.path.join(path, 'hospital_ids_source_reindexed.pkl'), 'rb'))
-                except:
+                except Exception as e:
+                    print('hospital_ids_source_reindexed.pkl not found', e)
                     hospital_ids_source = None
                 return source_sequences, target_sequences, source_tokens_to_ids, target_tokens_to_ids, old_to_new_ids_source, old_to_new_ids_target, hospital_ids_source
             try:
                 hospital_ids_source = pickle.load(open(os.path.join(path, 'hospital_ids_source.pkl'), 'rb'))
-            except:
+            except Exception as e:
+                print('hospital_ids_source.pkl not found', e)
                 hospital_ids_source = None    
 
             return source_sequences, target_sequences, source_tokens_to_ids, target_tokens_to_ids, old_to_new_ids_source, old_to_new_ids_target, hospital_ids_source
@@ -81,7 +87,8 @@ def load_data(path: str = 'outputData/originalData/' , updated_ids_to_types : bo
             ids_to_types_map = pickle.load(open(os.path.join(path, 'ids_to_types.pkl'), 'rb'))
             try:
                 subject_id_hadm_id_map_notes = pickle.load(open(os.path.join(path, 'subject_id_hadm_map.pkl'), 'rb'))
-            except:
+            except Exception as e:
+                print('subject_id_hadm_map.pkl not found', e)
                 subject_id_hadm_id_map_notes = None
 
             return patients_visits_sequences, tokens_to_ids_map, ids_to_types_map, subject_id_hadm_id_map_notes
