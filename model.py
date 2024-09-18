@@ -154,7 +154,8 @@ class Seq2SeqTransformerWithNotes(nn.Module):
 
         super(Seq2SeqTransformerWithNotes, self).__init__()
         self.bert = bert
-        self.bert.eval()
+        if bert is not None:
+            self.bert.eval()
         self.transformer = Transformer(
             d_model=emb_size,
             nhead=nhead,
