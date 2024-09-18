@@ -158,9 +158,9 @@ class Seq2SeqTransformerWithNotes(nn.Module):
             self.bert.eval()
 
             if self.bert.config.strategy == "all":
-            self.projection = LinearProjection(
-                bert.config.seq_len, bert.config.seq_len // 2
-            )  # seq_len
+                self.projection = LinearProjection(
+                    bert.config.seq_len, bert.config.seq_len // 2
+                )  # seq_len
         self.transformer = Transformer(
             d_model=emb_size,
             nhead=nhead,
