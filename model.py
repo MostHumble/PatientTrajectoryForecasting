@@ -156,6 +156,11 @@ class Seq2SeqTransformerWithNotes(nn.Module):
         self.bert = bert
         if bert is not None:
             self.bert.eval()
+
+            if self.bert.config.strategy == "all":
+            self.projection = LinearProjection(
+                bert.config.seq_len, bert.config.seq_len // 2
+            )  # seq_len
         self.transformer = Transformer(
             d_model=emb_size,
             nhead=nhead,
@@ -170,10 +175,7 @@ class Seq2SeqTransformerWithNotes(nn.Module):
         self.generator = nn.Linear(emb_size, tgt_vocab_size)
         self.src_tok_emb = TokenEmbedding(src_vocab_size, emb_size)
         self.tgt_tok_emb = TokenEmbedding(tgt_vocab_size, emb_size)
-        if self.bert.config.strategy == "all":
-            self.projection = LinearProjection(
-                bert.config.seq_len, bert.config.seq_len // 2
-            )  # seq_len
+        
 
         self.positional_encoding = (
             PositionalEncoding(
