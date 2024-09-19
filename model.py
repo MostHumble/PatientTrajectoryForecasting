@@ -149,7 +149,7 @@ class Seq2SeqTransformerWithNotes(nn.Module):
         dropout: float = 0.1,
         use_positional_encoding_notes: bool = False,
         positional_encoding: bool = False,
-        bert=None,
+        bert = None,
     ):
 
         super(Seq2SeqTransformerWithNotes, self).__init__()
@@ -285,10 +285,10 @@ class Seq2SeqTransformerWithNotes(nn.Module):
         self,
         src: torch.Tensor,
         src_mask: torch.Tensor,
-        notes_input_ids: torch.Tensor,
-        notes_attention_mask: torch.Tensor,
-        notes_token_type_ids: torch.Tensor,
-        hospital_ids_lens: torch.Tensor,
+        notes_input_ids: torch.Tensor = None,
+        notes_attention_mask: torch.Tensor = None,
+        notes_token_type_ids: torch.Tensor = None,
+        hospital_ids_lens: torch.Tensor = None,
     ):
 
         source_embeds = self.positional_encoding(self.src_tok_emb(src))
@@ -371,7 +371,7 @@ class Seq2SeqTransformerWithNotes(nn.Module):
         src: torch.Tensor,
         src_mask: torch.Tensor,
         src_key_padding_mask: torch.Tensor,
-        notes_input_ids: torch.Tensor,
+        notes_input_ids: torch.Tensor = None,
         notes_attention_mask: torch.Tensor = None,
         notes_token_type_ids: torch.Tensor = None,
         hospital_ids_lens: torch.Tensor = None,
