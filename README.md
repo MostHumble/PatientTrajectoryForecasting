@@ -81,3 +81,38 @@ To reproduce results from other models in the literature:
 ## Visualization
 
 Various visualization scripts and utilities are available in the `stats/` directory. Use these to generate plots and analyze the results.
+
+## Acknowledgments
+
+The project leading to this publication has received funding from the Excellence Initiative of Aix Marseille Université - A*Midex, a French “Investissements d’Avenir programme” AMX-21-IET-017.
+
+We would like to thank **LIS** | Laboratoire d'Informatique et Systèmes, Aix-Marseille University for providing the GPU resources necessary for pretraining and conducting extensive experiments. Additionally, we acknowledge **CEDRE** | CEntre de formation et de soutien aux Données de la REcherche, Programme 2 du projet France 2030 IDeAL for supporting early-stage experiments and hosting part of the computational infrastructure.
+
+## Citation
+
+**BibTeX:**
+
+```bibtex
+@misc{klioui2025patienttrajectorypredictionintegrating,
+      title={Patient Trajectory Prediction: Integrating Clinical Notes with Transformers}, 
+      author={Sifal Klioui and Sana Sellami and Youssef Trardi},
+      year={2025},
+      eprint={2502.18009},
+      archivePrefix={arXiv},
+      primaryClass={cs.LG},
+      url={https://arxiv.org/abs/2502.18009}, 
+}
+
+@article{RNTI/papers/1002990,
+  author    = {Sifal Klioui and Sana Sellami and Youssef Trardi},
+  title     = {Prédiction de la trajectoire du patient : Intégration des notes cliniques aux transformers},
+  journal = {Revue des Nouvelles Technologies de l'Information},
+  volume = {Extraction et Gestion des Connaissances, RNTI-E-41},
+  year      = {2025},
+  pages     = {135-146}
+}
+```
+
+## More Information
+
+For further details, please refer to the model’s repository and supplementary documentation.
