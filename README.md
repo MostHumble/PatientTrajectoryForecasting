@@ -16,7 +16,7 @@ This repository contains the code and resources for our research on patient traj
 
 - `literature_models/`: Contains notebooks and scripts to reproduce results from various models in the literature using our cross-validation folds.
 - `notebooks/`: Jupyter notebooks for data preparation, model training, and evaluation.
-  - `MedNLI.ipynb`: Notebook for reporting MedNLI results of Clinical Mosaic.
+  - `Clinical_Mosaic_MedNLI.ipynb`: Notebook for reproducing MedNLI results of Clinical Mosaic.
   - `prepare_data.ipynb`: Notebook to prepare the data (after preparing the notes)
 - `stats/`: Utilities for visualization and statistical analysis.
 - `tests/`: Test scripts to ensure correct preprocessing of notes, especially when using multiple processes/threads.
