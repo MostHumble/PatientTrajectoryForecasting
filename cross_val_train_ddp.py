@@ -21,7 +21,7 @@ from transformers import AutoConfig
 from transformers.models.bert.configuration_bert import BertConfig
 
 from model import Seq2SeqTransformerWithNotes
-from utils.bert_embeddings import MosaicBertForEmbeddingGeneration
+from utils.bert_embeddings import MosaicBertForEmbeddingGenerationHF
 from utils.eval import mapk, recallTop
 from utils.train import (
     WarmupStableDecay,
@@ -570,29 +570,19 @@ def train_epoch_with_notes(
 
 
 def get_model(
-    pretrained_model_name: str = "bert-base-uncased",
-    model_config: Optional[dict] = None,
-    pretrained_checkpoint: Optional[str] = None,
-    num_embedding_layers: int = 4,
-    strategy="concat",
-    seq_len=512,
+    pretrained_model_name: str,
+    num_embedding_layers: int,
+    strategy: str,
+    seq_len: int = 512,
 ):
-
-    model_config, unused_kwargs = BertConfig.get_config_dict(model_config)
-    model_config.update(unused_kwargs)
-
-    config, unused_kwargs = AutoConfig.from_pretrained(
-        pretrained_model_name, return_unused_kwargs=True, **model_config
-    )
-    # This lets us use non-standard config fields (e.g. `starting_alibi_size`)
-    config.update(unused_kwargs)
-    config.num_embedding_layers = num_embedding_layers
-    config.strategy = strategy
-    config.seq_len = seq_len
-    model = MosaicBertForEmbeddingGeneration.from_pretrained(
-        pretrained_checkpoint=pretrained_checkpoint, config=config
-    )
-
+    from transformers import AutoModel
+    pretrained_model = AutoModel.from_pretrained(pretrained_model_name, trust_remote_code=True)
+    # Set custom attributes in the config
+    pretrained_model.config.num_embedding_layers = num_embedding_layers
+    pretrained_model.config.strategy = strategy
+    pretrained_model.config.seq_len = seq_len
+    # Create the custom embedding model
+    model = MosaicBertForEmbeddingGenerationHF(pretrained_model=pretrained_model)
     return model
 
 
@@ -729,12 +719,7 @@ def train_transformer(
 
 if __name__ == "__main__":
 
-    PRETRAINED_MODEL_CHECKPOINT = os.path.join(
-        "bert_mimic_model_512/step_80000", "pytorch_model.bin"
-    )
-    PRETRAINED_MODEL_NAME = "mosaicml/mosaic-bert-base-seqlen-512"
-    MODEL_CONFIG = "mosaicml/mosaic-bert-base-seqlen-512"
-
+    PRETRAINED_MODEL_NAME = "Sifal/ClinicalMosaic"
     parser = argparse.ArgumentParser(description="CLI for wandb sweep parameters")
 
     # Fixed value parameters
@@ -865,7 +850,7 @@ if __name__ == "__main__":
         args.use_positional_encoding_notes = False
         print("Not using positional encoding for notes")
 
-    seed = enforce_reproducibility(seed=args.seed)
+    seed = enforce_reproducibility(use_seed=args.seed)
 
     if args.mixed_precision:
         torch.set_float32_matmul_precision("high")
@@ -937,12 +922,10 @@ if __name__ == "__main__":
     cumulative_recallk = {f"test_recall@{k}": 0.0 for k in ks}
 
     bert_model = get_model(
-        pretrained_model_name=PRETRAINED_MODEL_NAME,
-        model_config=MODEL_CONFIG,
-        pretrained_checkpoint=PRETRAINED_MODEL_CHECKPOINT,
-        num_embedding_layers=args.num_embedding_layers,
-        strategy=args.strategy,
-    )
+    pretrained_model_name=PRETRAINED_MODEL_NAME,
+    num_embedding_layers=args.num_embedding_layers,
+    strategy=args.strategy,
+)
 
     transformer = Seq2SeqTransformerWithNotes(
         num_encoder_layers=args.num_encoder_layers,
